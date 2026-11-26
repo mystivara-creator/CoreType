@@ -64,20 +64,33 @@ def extract_sf_pro(dmg_path: Path, extract_dir: Path) -> Path:
     print(f"[CoreType] Extracting {pkg_path.name} ...")
     run_cmd(["7z", "x", "-y", str(pkg_path)], cwd=extract_dir)
 
-    payload_candidates = list(extract_dir.rglob("Payload~")) + list(extract_dir.rglob("Payload"))
-    if not payload_candidates:
-        raise FileNotFoundError("Could not find Payload inside SFProFonts.pkg")
-    payload_path = payload_candidates[0]
-
     payload_dir = extract_dir / "payload"
     payload_dir.mkdir(exist_ok=True)
-    print(f"[CoreType] Unpacking {payload_path.name} ...")
-    run_cmd(["7z", "x", "-y", str(payload_path)], cwd=payload_dir)
 
-    fonts_dir = payload_dir / "Library" / "Fonts"
-    if not (fonts_dir / "SF-Pro.ttf").exists():
-        raise FileNotFoundError(f"SF-Pro.ttf not found in {fonts_dir}")
-    return fonts_dir
+    # 7z extracts XAR .pkg into either Payload (gzipped cpio) or Payload~ (raw cpio)
+    gzip_payloads = list(extract_dir.rglob("Payload"))
+    cpio_payloads = list(extract_dir.rglob("Payload~"))
+
+    if not cpio_payloads and gzip_payloads:
+        print(f"[CoreType] Decompressing {gzip_payloads[0].name} ...")
+        run_cmd(["7z", "x", "-y", str(gzip_payloads[0])], cwd=payload_dir)
+        cpio_payloads = list(payload_dir.rglob("Payload~")) + [
+            p for p in payload_dir.iterdir() if p.is_file() and p.name.startswith("Payload")
+        ]
+
+    if cpio_payloads:
+        print(f"[CoreType] Unpacking {cpio_payloads[0].name} ...")
+        run_cmd(["7z", "x", "-y", str(cpio_payloads[0])], cwd=payload_dir)
+    elif gzip_payloads:
+        # Newer 7z may have extracted directly on first pass
+        pass
+    else:
+        raise FileNotFoundError("Could not find Payload inside SFProFonts.pkg")
+
+    found = list(payload_dir.rglob("SF-Pro.ttf"))
+    if not found:
+        raise FileNotFoundError(f"SF-Pro.ttf not found under {payload_dir}")
+    return found[0].parent
 
 
 def subset_font(font: TTFont) -> None:
