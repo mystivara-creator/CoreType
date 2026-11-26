@@ -131,11 +131,21 @@ ct_validate_font_xml() {
                 }
             }
             tmp = line
-            while (match(tmp, /<family([[:space:]]|>)/)) { fo++; tmp = substr(tmp, RSTART + RLENGTH) }
+            while (match(tmp, /<family([ \t]|>)/)) { fo++; tmp = substr(tmp, RSTART + RLENGTH) }
             tmp = line
             while (match(tmp, /<\/family>/)) { fc++; tmp = substr(tmp, RSTART + RLENGTH) }
             tmp = line
-            while (match(tmp, /<font([[:space:]]|>)/)) { fno++; tmp = substr(tmp, RSTART + RLENGTH) }
+            while (match(tmp, /<font([ \t]|>)/)) {
+                rest = substr(tmp, RSTART)
+                next_pos = RSTART + RLENGTH
+                if (rest ~ /^<font[^>]*\/>/) {
+                    sub(/^<font[^>]*\/>/, "", rest)
+                    tmp = rest
+                    continue
+                }
+                fno++
+                tmp = substr(tmp, next_pos)
+            }
             tmp = line
             while (match(tmp, /<\/font>/)) { fnc++; tmp = substr(tmp, RSTART + RLENGTH) }
         }
@@ -168,6 +178,8 @@ ct_patch_font_xml() {
 
     [ -r "$_src" ] || return 1
     ct_load_profile "$_prof"
+
+    mkdir -p "$(dirname "$_dst")" || return 1
 
     # Match target schema: Android 14-16 font_fallback.xml supports postScriptName;
     # legacy fonts.xml (<familyset version="22">) omits postScriptName cleanly.
@@ -205,14 +217,14 @@ ct_patch_font_xml() {
             fam_buf = ""
             fam_type = ""
         }
-        /<family([[:space:]]|>)/ {
+        /<family([ \t]|>)/ {
             in_fam = 1
             fam_buf = $0 "\n"
             fam_type = "other"
             if ($0 ~ /name="sans-serif"/) fam_type = "sans"
             else if ($0 ~ /name="sans-serif-condensed"/) fam_type = "cond"
             else if ($0 ~ /name="sans-serif-display"/) fam_type = "disp"
-            else if ($0 ~ /<family[[:space:]]*>/) fam_type = "unnamed"
+            else if ($0 ~ /<family[ \t]*>/) fam_type = "unnamed"
             if ($0 ~ /<\/family>/) {
                 if (fam_type == "sans") dump_file(sans_f)
                 else if (fam_type == "cond") dump_file(cond_f)

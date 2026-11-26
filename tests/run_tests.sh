@@ -95,8 +95,9 @@ cat > "$TMP_DIR/hyperos3_fallback.xml" <<'EOF'
 </familyset>
 EOF
 
-if ct_patch_font_xml "$TMP_DIR/hyperos3_fallback.xml" "$TMP_DIR/font_fallback.xml" "dynamic_optical" "$MOCK_FONTS"; then
-    pass "HyperOS 3 font_fallback.xml patched & validated cleanly"
+if ct_patch_font_xml "$TMP_DIR/hyperos3_fallback.xml" "$TMP_DIR/nested/etc/font_fallback.xml" "dynamic_optical" "$MOCK_FONTS"; then
+    pass "HyperOS 3 font_fallback.xml patched & validated cleanly (auto-created nested dir)"
+    cp "$TMP_DIR/nested/etc/font_fallback.xml" "$TMP_DIR/font_fallback.xml"
 else
     fail "HyperOS 3 font_fallback.xml patching failed"
 fi
