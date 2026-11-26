@@ -22,7 +22,7 @@ ct_ui_print() {
 ct_ui_print " "
 ct_ui_print "============================================="
 ct_ui_print "  CoreType — Optical SF Pro Engine v1.0.0"
-ct_ui_print "  by mystivara | Zero LSPosed"
+ct_ui_print "  by Mystivara | Zero LSPosed"
 ct_ui_print "============================================="
 
 if [ ! -f "$MODPATH/system/fonts/CoreType-SFPro.ttf" ]; then
