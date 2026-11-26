@@ -8,15 +8,17 @@ MODDIR="${0%/*}"
 # shellcheck disable=SC1091
 . "$MODDIR/lib/profiles.sh"
 
-# Wait for Android boot completion before disarming Bootloop Guard
+# Wait for Android boot completion (up to 90s for post-flash ART cache) before disarming Bootloop Guard
 _wait=0
-while [ "$(getprop sys.boot_completed 2>/dev/null)" != "1" ] && [ "$_wait" -lt 60 ]; do
+while [ "$(getprop sys.boot_completed 2>/dev/null)" != "1" ] && [ "$_wait" -lt 90 ]; do
     sleep 1
     _wait=$((_wait + 1))
 done
 
+_guard_state="armed"
 if [ "$(getprop sys.boot_completed 2>/dev/null)" = "1" ]; then
     printf '0\n' > "$CT_DATA_DIR/boot_attempts" 2>/dev/null || true
+    _guard_state="healthy"
 fi
 
 _prof=$(ct_conf_get "applied_profile" "dynamic_optical")
@@ -62,5 +64,5 @@ ct_state_set "wdth_disp" "$CT_WDTH_DISP"
 ct_state_set "font_mounted" "$_font_ok"
 ct_state_set "xml_active" "$_xml_active"
 ct_state_set "optical_engine" "dual_master_gpos_trak"
-ct_state_set "bootloop_guard" "healthy"
-ct_log "Boot verify: status=$_status profile=$CT_PROFILE xml=$_xml_active fonts=$_font_ok"
+ct_state_set "bootloop_guard" "$_guard_state"
+ct_log "Boot verify: status=$_status profile=$CT_PROFILE xml=$_xml_active fonts=$_font_ok guard=$_guard_state"

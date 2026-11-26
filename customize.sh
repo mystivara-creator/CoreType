@@ -123,19 +123,25 @@ if [ "$PATCHED_COUNT" -eq 0 ]; then
     abort "! Failed to patch any system font XML safely. Aborting with zero changes."
 fi
 
-# 3. SELinux-safe real file copies (no symlinks) for apps, Status Bar & Launcher loading Latin fonts directly.
-#    NEVER touches MiSansVF.ttf (CJK), MiSansArabicVF.ttf, MiClock*.otf, or NotoColorEmoji.ttf.
+# 3. SELinux-safe hardlinks (real inode, no symlinks; cp fallback) for apps loading Latin fonts directly.
+#    Shares kernel page cache (saves ~12 MB RAM & disk) and NEVER touches CJK MiSansVF.ttf, Arabic, MiClock, or Emoji.
+ct_sync_font_file() {
+    _src_f="$1"
+    _dst_f="$2"
+    ln -f "$_src_f" "$_dst_f" 2>/dev/null || cp -f "$_src_f" "$_dst_f"
+}
+
 for _direct_font in Roboto-Regular.ttf RobotoStatic-Regular.ttf MiSansVF_Overlay.ttf MiSansLatinVF.ttf; do
     if [ -e "/system/fonts/$_direct_font" ]; then
-        cp -f "$MODPATH/system/fonts/CoreType-SFPro-Text.ttf" "$MODPATH/system/fonts/$_direct_font"
-        ct_ui_print "- Synced /system/fonts/$_direct_font (SELinux-safe copy)"
+        ct_sync_font_file "$MODPATH/system/fonts/CoreType-SFPro-Text.ttf" "$MODPATH/system/fonts/$_direct_font"
+        ct_ui_print "- Synced /system/fonts/$_direct_font (shared inode)"
     fi
 done
 
 if [ -f /product/fonts/MiSansLatinVF.ttf ] || [ -f /system/product/fonts/MiSansLatinVF.ttf ]; then
     mkdir -p "$MODPATH/system/product/fonts"
-    cp -f "$MODPATH/system/fonts/CoreType-SFPro-Text.ttf" "$MODPATH/system/product/fonts/MiSansLatinVF.ttf"
-    ct_ui_print "- Synced /product/fonts/MiSansLatinVF.ttf (SELinux-safe copy)"
+    ct_sync_font_file "$MODPATH/system/fonts/CoreType-SFPro-Text.ttf" "$MODPATH/system/product/fonts/MiSansLatinVF.ttf"
+    ct_ui_print "- Synced /product/fonts/MiSansLatinVF.ttf (shared inode)"
 fi
 
 set_perm_recursive "$MODPATH" 0 0 0755 0644

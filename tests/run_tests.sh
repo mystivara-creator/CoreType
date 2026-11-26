@@ -64,6 +64,7 @@ printf '=== Test 1: HyperOS 3 font_fallback.xml Dual-Optical Patching ===\n'
 cat > "$TMP_DIR/hyperos3_fallback.xml" <<'EOF'
 <?xml version="1.0" encoding="utf-8"?>
 <familyset>
+    <!-- <family name="sans-serif"><font>CommentedOut.ttf</font></family> -->
     <family name="sans-serif">
         <font weight="100" style="normal" postScriptName="MiSansVF">MiSansVF_Overlay.ttf
             <axis tag="wght" stylevalue="150" />
@@ -125,6 +126,7 @@ assert_not_grep 'MiSansLatinVF\.ttf' "$TMP_DIR/font_fallback.xml" "Replaced MiSa
 assert_grep 'MiSansArabicVF\.ttf' "$TMP_DIR/font_fallback.xml" "Preserved Arabic fallback"
 assert_grep 'MiSansJapaneseVF\.ttf' "$TMP_DIR/font_fallback.xml" "Preserved Japanese fallback"
 assert_grep 'NotoColorEmoji\.ttf' "$TMP_DIR/font_fallback.xml" "Preserved NotoColorEmoji fallback"
+assert_grep 'CommentedOut\.ttf' "$TMP_DIR/font_fallback.xml" "Preserved commented-out <family> block verbatim"
 
 printf '=== Test 2: Legacy fonts.xml Schema Faithfulness (No postScriptName) ===\n'
 cat > "$TMP_DIR/legacy_fonts.xml" <<'EOF'

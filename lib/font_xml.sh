@@ -217,8 +217,20 @@ ct_patch_font_xml() {
         }
         BEGIN {
             in_fam = 0
+            in_cmt = 0
             fam_buf = ""
             fam_type = ""
+        }
+        in_cmt == 1 {
+            print
+            if (index($0, "-->") > 0) in_cmt = 0
+            next
+        }
+        in_fam == 0 && index($0, "<!--") > 0 {
+            print
+            s = index($0, "<!--")
+            if (index(substr($0, s + 4), "-->") == 0) in_cmt = 1
+            next
         }
         /<family([ \t]|>)/ {
             in_fam = 1
