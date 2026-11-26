@@ -86,6 +86,11 @@ cat > "$TMP_DIR/hyperos3_fallback.xml" <<'EOF'
     <family name="roboto-flex">
         <font weight="400" style="normal">RobotoFlex-Regular.ttf</font>
     </family>
+    <family>
+        <font supportedAxes="wght,ital">Roboto-Regular.ttf
+            <axis tag="wdth" stylevalue="100" />
+        </font>
+    </family>
     <family lang="ar">
         <font weight="400" style="normal">MiSansArabicVF.ttf</font>
     </family>
@@ -111,6 +116,7 @@ assert_grep 'weight="600" style="normal" postScriptName="CoreTypeSFProDisplay-Re
 assert_grep 'weight="700" style="italic" postScriptName="CoreTypeSFProDisplay-Italic">CoreType-SFPro-Display-Italic\.ttf' "$TMP_DIR/font_fallback.xml" "Header 700 italic routed to SF Pro Display Italic"
 assert_grep 'weight="100" style="normal" postScriptName="CoreTypeSFProDisplay-Regular">CoreType-SFPro-Display\.ttf' "$TMP_DIR/font_fallback.xml" "Lockscreen clock 100 routed to SF Pro Display"
 assert_not_grep 'RobotoFlex-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Replaced roboto-flex with Dual-Optical SF Pro"
+assert_not_grep 'Roboto-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Replaced unnamed Roboto-Regular.ttf fallback (prevents duplicate sans-serif overwrite)"
 assert_grep 'tag="wdth" stylevalue="96\.5"' "$TMP_DIR/font_fallback.xml" "Calibrated Text width wdth=96.5"
 assert_grep 'tag="wdth" stylevalue="97\.0"' "$TMP_DIR/font_fallback.xml" "Calibrated Display width wdth=97.0"
 assert_grep 'tag="wdth" stylevalue="82\.0"' "$TMP_DIR/font_fallback.xml" "Optical condensed width wdth=82.0"
@@ -202,7 +208,6 @@ if command -v shellcheck >/dev/null 2>&1; then
         "$REPO_ROOT/lib/common.sh" \
         "$REPO_ROOT/lib/profiles.sh" \
         "$REPO_ROOT/lib/font_xml.sh" \
-        "$REPO_ROOT/scripts/build_overlays.sh" \
         "$REPO_ROOT/tests/run_tests.sh"; then
         pass "ShellCheck passed with 0 warnings"
     else

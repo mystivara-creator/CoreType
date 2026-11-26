@@ -17,10 +17,6 @@ done
 
 if [ "$(getprop sys.boot_completed 2>/dev/null)" = "1" ]; then
     printf '0\n' > "$CT_DATA_DIR/boot_attempts" 2>/dev/null || true
-    if command -v cmd >/dev/null 2>&1; then
-        cmd overlay enable --user 0 org.mystivara.coretype.overlay.settings >/dev/null 2>&1 || true
-        cmd overlay set-priority org.mystivara.coretype.overlay.settings highest >/dev/null 2>&1 || true
-    fi
 fi
 
 _prof=$(ct_conf_get "applied_profile" "dynamic_optical")

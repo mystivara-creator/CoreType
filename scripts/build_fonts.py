@@ -46,14 +46,14 @@ KEEP_UNICODES = (
     + [0xFEFF, 0xFFFC, 0xFFFD]     # BOM, Object Replacement, Replacement Char
 )
 
-# Optically centered vertical metrics (UPM 2048, total height 2444 = Apple native):
-# Cap/digit center is ~722 UPM; (1968 - 476) / 2 = 746 UPM -> centers digits dead-center
-# inside HyperOS circular notification badges, battery pills, and status bar icons.
-ANDROID_ASCENT = 1968
-ANDROID_DESCENT = -476
+# Optically centered vertical metrics (UPM 2048, total height 2450 = Android Roboto native):
+# Cap/digit center is ~722 UPM; (1990 - 460) / 2 = 765 UPM -> shifts digits down ~1px so
+# circular notification badges ("2") and status bar battery pills sit dead-center.
+ANDROID_ASCENT = 1990
+ANDROID_DESCENT = -460
 ANDROID_LINE_GAP = 0
-ANDROID_WIN_ASCENT = 1968
-ANDROID_WIN_DESCENT = 476
+ANDROID_WIN_ASCENT = 1990
+ANDROID_WIN_DESCENT = 460
 
 # Optical master specifications derived directly from Apple SF-Pro.ttf `trak` table (UPM 2048):
 # - Text (16–17pt iOS UI): Apple `trak` track 0.0 is -40..-52 UPM -> bake -46 UPM (+ mild wdth=96.5 default)

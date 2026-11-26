@@ -251,7 +251,7 @@ ct_patch_font_xml() {
                     dump_file(disp_f)
                 } else if (fam_type == "flex") {
                     dump_file(flex_f)
-                } else if (fam_type == "unnamed" && fam_buf ~ /MiSansLatinVF\.ttf/) {
+                } else if (fam_type == "unnamed" && (fam_buf ~ /MiSansLatinVF\.ttf/ || fam_buf ~ /Roboto-Regular\.ttf/)) {
                     dump_file(latin_f)
                 } else {
                     printf "%s", fam_buf
