@@ -202,6 +202,7 @@ if command -v shellcheck >/dev/null 2>&1; then
         "$REPO_ROOT/lib/common.sh" \
         "$REPO_ROOT/lib/profiles.sh" \
         "$REPO_ROOT/lib/font_xml.sh" \
+        "$REPO_ROOT/scripts/build_overlays.sh" \
         "$REPO_ROOT/tests/run_tests.sh"; then
         pass "ShellCheck passed with 0 warnings"
     else

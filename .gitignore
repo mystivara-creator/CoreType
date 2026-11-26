@@ -7,6 +7,7 @@ dist/
 system/fonts/*.ttf
 system/fonts/*.otf
 system/product/fonts/*.ttf
+system/product/overlay/*.apk
 system/etc/font_fallback.xml
 system/etc/fonts.xml
 __pycache__/

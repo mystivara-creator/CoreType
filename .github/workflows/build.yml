@@ -46,6 +46,9 @@ jobs:
           print(f"[PASS] HarfBuzz GPOS tracking & Apple calt clock colon verified ({c_text} -> {c_clock})")
           PY
 
+      - name: Build clean-room Settings RRO overlay (MiSans -> SF Pro)
+        run: sh scripts/build_overlays.sh system/product/overlay
+
       - name: Package flashable Magisk / KernelSU / APatch zip
         run: |
           VERSION=$(grep '^version=' module.prop | cut -d= -f2)
