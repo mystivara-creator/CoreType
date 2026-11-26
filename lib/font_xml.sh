@@ -185,7 +185,7 @@ ct_patch_font_xml() {
     # legacy fonts.xml (<familyset version="22">) omits postScriptName cleanly.
     _use_ps="0"
     case "$(basename "$_dst")" in
-        font_fallback.xml) _use_ps="1" ;;
+        *font_fallback.xml) _use_ps="1" ;;
         *)
             if grep -q 'postScriptName=' "$_src" 2>/dev/null; then
                 _use_ps="1"
@@ -197,17 +197,20 @@ ct_patch_font_xml() {
     _latin_file="$_dst.latin.$$"
     _cond_file="$_dst.cond.$$"
     _disp_file="$_dst.disp.$$"
+    _flex_file="$_dst.flex.$$"
     _tmp_out="$_dst.tmp.$$"
 
     ct_emit_sans_serif_block '<family name="sans-serif">' "$_use_ps" > "$_sans_file"
     ct_emit_sans_serif_block '<family>' "$_use_ps" > "$_latin_file"
     ct_emit_condensed_block '<family name="sans-serif-condensed">' "$_use_ps" > "$_cond_file"
     ct_emit_display_block '<family name="sans-serif-display">' "$_use_ps" > "$_disp_file"
+    ct_emit_sans_serif_block '<family name="roboto-flex">' "$_use_ps" > "$_flex_file"
 
     awk -v sans_f="$_sans_file" \
         -v latin_f="$_latin_file" \
         -v cond_f="$_cond_file" \
-        -v disp_f="$_disp_file" '
+        -v disp_f="$_disp_file" \
+        -v flex_f="$_flex_file" '
         function dump_file(path,    line) {
             while ((getline line < path) > 0) print line
             close(path)
@@ -224,11 +227,13 @@ ct_patch_font_xml() {
             if ($0 ~ /name="sans-serif"/) fam_type = "sans"
             else if ($0 ~ /name="sans-serif-condensed"/) fam_type = "cond"
             else if ($0 ~ /name="sans-serif-display"/) fam_type = "disp"
+            else if ($0 ~ /name="roboto-flex"/) fam_type = "flex"
             else if ($0 ~ /<family[ \t]*>/) fam_type = "unnamed"
             if ($0 ~ /<\/family>/) {
                 if (fam_type == "sans") dump_file(sans_f)
                 else if (fam_type == "cond") dump_file(cond_f)
                 else if (fam_type == "disp") dump_file(disp_f)
+                else if (fam_type == "flex") dump_file(flex_f)
                 else printf "%s", fam_buf
                 in_fam = 0
                 fam_buf = ""
@@ -244,6 +249,8 @@ ct_patch_font_xml() {
                     dump_file(cond_f)
                 } else if (fam_type == "disp") {
                     dump_file(disp_f)
+                } else if (fam_type == "flex") {
+                    dump_file(flex_f)
                 } else if (fam_type == "unnamed" && fam_buf ~ /MiSansLatinVF\.ttf/) {
                     dump_file(latin_f)
                 } else {
@@ -257,7 +264,7 @@ ct_patch_font_xml() {
         { print }
     ' "$_src" > "$_tmp_out"
 
-    rm -f "$_sans_file" "$_latin_file" "$_cond_file" "$_disp_file"
+    rm -f "$_sans_file" "$_latin_file" "$_cond_file" "$_disp_file" "$_flex_file"
 
     if ct_validate_font_xml "$_tmp_out" "$_fdir"; then
         mkdir -p "$(dirname "$_dst")"

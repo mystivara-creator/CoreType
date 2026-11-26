@@ -83,6 +83,9 @@ cat > "$TMP_DIR/hyperos3_fallback.xml" <<'EOF'
     <family name="sans-serif-condensed">
         <font weight="400" style="normal">RobotoCondensed-Regular.ttf</font>
     </family>
+    <family name="roboto-flex">
+        <font weight="400" style="normal">RobotoFlex-Regular.ttf</font>
+    </family>
     <family lang="ar">
         <font weight="400" style="normal">MiSansArabicVF.ttf</font>
     </family>
@@ -107,6 +110,7 @@ assert_grep 'weight="400" style="italic" postScriptName="CoreTypeSFProText-Itali
 assert_grep 'weight="600" style="normal" postScriptName="CoreTypeSFProDisplay-Regular">CoreType-SFPro-Display\.ttf' "$TMP_DIR/font_fallback.xml" "Header 600 routed to SF Pro Display (opsz=28)"
 assert_grep 'weight="700" style="italic" postScriptName="CoreTypeSFProDisplay-Italic">CoreType-SFPro-Display-Italic\.ttf' "$TMP_DIR/font_fallback.xml" "Header 700 italic routed to SF Pro Display Italic"
 assert_grep 'weight="100" style="normal" postScriptName="CoreTypeSFProDisplay-Regular">CoreType-SFPro-Display\.ttf' "$TMP_DIR/font_fallback.xml" "Lockscreen clock 100 routed to SF Pro Display"
+assert_not_grep 'RobotoFlex-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Replaced roboto-flex with Dual-Optical SF Pro"
 assert_grep 'tag="wdth" stylevalue="96\.5"' "$TMP_DIR/font_fallback.xml" "Calibrated Text width wdth=96.5"
 assert_grep 'tag="wdth" stylevalue="97\.0"' "$TMP_DIR/font_fallback.xml" "Calibrated Display width wdth=97.0"
 assert_grep 'tag="wdth" stylevalue="82\.0"' "$TMP_DIR/font_fallback.xml" "Optical condensed width wdth=82.0"

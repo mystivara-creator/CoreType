@@ -101,26 +101,41 @@ for _xml_name in font_fallback.xml fonts.xml; do
     fi
 done
 
+# HyperOS 3 /system_ext/etc/hyper_font_fallback.xml & hyper_fonts.xml targets
+for _hxml in hyper_font_fallback.xml hyper_fonts.xml; do
+    _hsrc="/system_ext/etc/$_hxml"
+    [ -r "$_hsrc" ] || _hsrc="/system/system_ext/etc/$_hxml"
+    if [ -r "$_hsrc" ]; then
+        _hbak="$STOCK_DIR/$_hxml"
+        if [ ! -r "$_hbak" ] && ! grep -q 'CoreType-SFPro' "$_hsrc" 2>/dev/null; then
+            cat "$_hsrc" > "$_hbak" 2>/dev/null || true
+        fi
+        _huse="$_hbak"
+        [ -r "$_huse" ] || _huse="$_hsrc"
+        if ct_patch_font_xml "$_huse" "$MODPATH/system/system_ext/etc/$_hxml" "$CT_PROFILE" "$MODPATH/system/fonts"; then
+            ct_ui_print "- Patched /system_ext/etc/$_hxml (HyperOS theme_webview target)"
+            PATCHED_COUNT=$((PATCHED_COUNT + 1))
+        fi
+    fi
+done
+
 if [ "$PATCHED_COUNT" -eq 0 ]; then
     abort "! Failed to patch any system font XML safely. Aborting with zero changes."
 fi
 
-# 3. SELinux-safe real file copies (no symlinks) for apps loading Latin font paths directly.
+# 3. SELinux-safe real file copies (no symlinks) for apps, Status Bar & Launcher loading Latin fonts directly.
 #    NEVER touches MiSansVF.ttf (CJK), MiSansArabicVF.ttf, MiClock*.otf, or NotoColorEmoji.ttf.
-if [ -f /system/fonts/Roboto-Regular.ttf ]; then
-    cp -f "$MODPATH/system/fonts/CoreType-SFPro-Text.ttf" "$MODPATH/system/fonts/Roboto-Regular.ttf"
-    ct_ui_print "- Synced Roboto-Regular.ttf (SELinux-safe copy)"
-fi
-
-if [ -f /system/fonts/RobotoStatic-Regular.ttf ]; then
-    cp -f "$MODPATH/system/fonts/CoreType-SFPro-Text.ttf" "$MODPATH/system/fonts/RobotoStatic-Regular.ttf"
-    ct_ui_print "- Synced RobotoStatic-Regular.ttf (SELinux-safe copy)"
-fi
+for _direct_font in Roboto-Regular.ttf RobotoStatic-Regular.ttf MiSansVF_Overlay.ttf MiSansLatinVF.ttf; do
+    if [ -e "/system/fonts/$_direct_font" ]; then
+        cp -f "$MODPATH/system/fonts/CoreType-SFPro-Text.ttf" "$MODPATH/system/fonts/$_direct_font"
+        ct_ui_print "- Synced /system/fonts/$_direct_font (SELinux-safe copy)"
+    fi
+done
 
 if [ -f /product/fonts/MiSansLatinVF.ttf ] || [ -f /system/product/fonts/MiSansLatinVF.ttf ]; then
     mkdir -p "$MODPATH/system/product/fonts"
     cp -f "$MODPATH/system/fonts/CoreType-SFPro-Text.ttf" "$MODPATH/system/product/fonts/MiSansLatinVF.ttf"
-    ct_ui_print "- Synced HyperOS MiSansLatinVF.ttf (SELinux-safe copy)"
+    ct_ui_print "- Synced /product/fonts/MiSansLatinVF.ttf (SELinux-safe copy)"
 fi
 
 set_perm_recursive "$MODPATH" 0 0 0755 0644

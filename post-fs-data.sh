@@ -69,6 +69,16 @@ if [ "$WANT_PROFILE" != "$APPLIED_PROFILE" ]; then
             fi
         fi
     done
+    for _hxml in hyper_font_fallback.xml hyper_fonts.xml; do
+        _hbak="$STOCK_DIR/$_hxml"
+        _hdst="$MODDIR/system/system_ext/etc/$_hxml"
+        if [ -r "$_hbak" ]; then
+            if ct_patch_font_xml "$_hbak" "$_hdst" "$WANT_PROFILE" "$MODDIR/system/fonts"; then
+                chmod 0644 "$_hdst" 2>/dev/null || true
+                _ok=$((_ok + 1))
+            fi
+        fi
+    done
     if [ "$_ok" -gt 0 ]; then
         ct_conf_set "applied_profile" "$WANT_PROFILE"
         ct_log "Applied optical profile '$WANT_PROFILE' on boot (patched=$_ok)"
