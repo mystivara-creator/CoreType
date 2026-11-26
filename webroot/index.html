@@ -12,7 +12,7 @@
       <div class="hero-top">
         <div>
           <h1>CoreType</h1>
-          <p class="subtitle">Optical SF Pro Typography Engine</p>
+          <p class="subtitle">Dual-Optical SF Pro Typography Engine</p>
         </div>
         <span id="status-badge" class="badge badge-muted">Checking…</span>
       </div>
@@ -22,14 +22,15 @@
       <div class="card-label">Live System Specimen</div>
       <div class="specimen-clock">09:41</div>
       <div class="specimen-header">Display &amp; Typography</div>
-      <div class="specimen-subhead">Optical Size Contrast — Header vs Body</div>
+      <div class="specimen-subhead">Dual Optical Master — Display vs Text</div>
       <p class="specimen-body">
-        San Francisco Pro dynamically shifts between tight <strong>Display</strong> headlines and open
-        <em>Text</em> paragraphs — calibrated for HyperOS &amp; Android without bloated layouts.
+        Headers &amp; clocks render with <strong>SF Pro Display</strong> (opsz 28, Apple Display tracking)
+        while paragraphs &amp; chats render with <em>SF Pro Text</em> (opsz 17, Apple Text tracking) —
+        zero layout bloat on HyperOS &amp; Android.
       </p>
       <div class="specimen-meta">
-        <span>Body: wght 400 · opsz 17</span>
-        <span>Header: wght 600–700 · opsz 26–28</span>
+        <span>Text: wght 350–500 · opsz 17 · −46 trak</span>
+        <span>Display: wght 100–300, 600–950 · opsz 28 · −26 trak</span>
       </div>
     </section>
 
@@ -41,21 +42,21 @@
             <span class="profile-title">iOS Optical Dynamic</span>
             <span class="pill">Recommended</span>
           </div>
-          <p class="profile-desc">Calibrated width (91 / 89) to match HyperOS &amp; Roboto grids with zero layout bloat.</p>
+          <p class="profile-desc">Pure SF Pro shapes (wdth 96.5 / 97.0) + Apple iOS GPOS tracking for exact HyperOS &amp; iOS rhythm.</p>
         </button>
 
         <button class="profile-item" data-profile="native_pro" type="button">
           <div class="profile-head">
             <span class="profile-title">iOS Native Pro</span>
           </div>
-          <p class="profile-desc">Near-original Apple width (98 / 96) with progressive opsz curve. Ideal for high-DPI displays.</p>
+          <p class="profile-desc">100% uncompressed Apple width (wdth 100.0) with baked Apple iOS tracking curve.</p>
         </button>
 
         <button class="profile-item" data-profile="compact_crisp" type="button">
           <div class="profile-head">
             <span class="profile-title">iOS Compact Crisp</span>
           </div>
-          <p class="profile-desc">Tighter optical width (86 / 84.5) for ultra-clean Status Bar, Quick Settings, and dense chats.</p>
+          <p class="profile-desc">Tighter optical width (wdth 91.5 / 92.0) for ultra-clean Status Bar, Control Center, and dense chats.</p>
         </button>
       </div>
       <div id="reboot-banner" class="banner hidden">
@@ -71,7 +72,11 @@
           <dd id="kv-profile">—</dd>
         </div>
         <div class="kv-row">
-          <dt>Font XML</dt>
+          <dt>Optical Masters</dt>
+          <dd id="kv-mounted">—</dd>
+        </div>
+        <div class="kv-row">
+          <dt>Active Font XML</dt>
           <dd id="kv-xml">—</dd>
         </div>
         <div class="kv-row">
@@ -79,8 +84,8 @@
           <dd id="kv-wdth">—</dd>
         </div>
         <div class="kv-row">
-          <dt>Variable Fonts</dt>
-          <dd id="kv-mounted">—</dd>
+          <dt>Bootloop Guard</dt>
+          <dd id="kv-guard">—</dd>
         </div>
       </dl>
     </section>

@@ -48,9 +48,10 @@
       badge.className = "badge badge-muted";
       selectButton("dynamic_optical");
       document.getElementById("kv-profile").textContent = "iOS Optical Dynamic";
+      document.getElementById("kv-mounted").textContent = "4/4 Dual-Optical VF";
       document.getElementById("kv-xml").textContent = "font_fallback.xml";
-      document.getElementById("kv-wdth").textContent = "91.0 / 89.0";
-      document.getElementById("kv-mounted").textContent = "Preview Mode";
+      document.getElementById("kv-wdth").textContent = "96.5 / 97.0";
+      document.getElementById("kv-guard").textContent = "Healthy";
       return;
     }
 
@@ -58,7 +59,7 @@
     const cf = parseProps(cfRes.out);
 
     const isActive = st.status === "active";
-    badge.textContent = isActive ? "Active" : "Degraded";
+    badge.textContent = isActive ? "Active" : st.status === "safe_disabled" ? "Safe Mode" : "Degraded";
     badge.className = "badge " + (isActive ? "badge-active" : "badge-warn");
 
     const wanted = cf.profile || st.profile || "dynamic_optical";
@@ -66,11 +67,13 @@
     selectButton(wanted);
 
     document.getElementById("kv-profile").textContent = st.profile_label || applied;
+    document.getElementById("kv-mounted").textContent =
+      st.font_mounted === "1" ? "4/4 Dual-Optical VF" : "Not Mounted";
     document.getElementById("kv-xml").textContent = st.xml_active || "none";
     document.getElementById("kv-wdth").textContent =
       st.wdth_text && st.wdth_disp ? `${st.wdth_text} / ${st.wdth_disp}` : "—";
-    document.getElementById("kv-mounted").textContent =
-      st.font_mounted === "1" ? "Mounted (SF Pro VF)" : "Not Mounted";
+    document.getElementById("kv-guard").textContent =
+      st.bootloop_guard === "healthy" ? "Healthy (0 faults)" : (st.bootloop_guard || "Armed");
 
     document.getElementById("reboot-banner").classList.toggle("hidden", wanted === applied);
   }
