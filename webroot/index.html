@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>CoreType</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="container">
+    <header class="hero">
+      <div class="hero-top">
+        <div>
+          <h1>CoreType</h1>
+          <p class="subtitle">Optical SF Pro Typography Engine</p>
+        </div>
+        <span id="status-badge" class="badge badge-muted">Checking…</span>
+      </div>
+    </header>
+
+    <section class="card specimen-card">
+      <div class="card-label">Live System Specimen</div>
+      <div class="specimen-clock">09:41</div>
+      <div class="specimen-header">Display &amp; Typography</div>
+      <div class="specimen-subhead">Optical Size Contrast — Header vs Body</div>
+      <p class="specimen-body">
+        San Francisco Pro dynamically shifts between tight <strong>Display</strong> headlines and open
+        <em>Text</em> paragraphs — calibrated for HyperOS &amp; Android without bloated layouts.
+      </p>
+      <div class="specimen-meta">
+        <span>Body: wght 400 · opsz 17</span>
+        <span>Header: wght 600–700 · opsz 26–28</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-label">Optical Width Profile</div>
+      <div class="profile-list" id="profile-list">
+        <button class="profile-item" data-profile="dynamic_optical" type="button">
+          <div class="profile-head">
+            <span class="profile-title">iOS Optical Dynamic</span>
+            <span class="pill">Recommended</span>
+          </div>
+          <p class="profile-desc">Calibrated width (91 / 89) to match HyperOS &amp; Roboto grids with zero layout bloat.</p>
+        </button>
+
+        <button class="profile-item" data-profile="native_pro" type="button">
+          <div class="profile-head">
+            <span class="profile-title">iOS Native Pro</span>
+          </div>
+          <p class="profile-desc">Near-original Apple width (98 / 96) with progressive opsz curve. Ideal for high-DPI displays.</p>
+        </button>
+
+        <button class="profile-item" data-profile="compact_crisp" type="button">
+          <div class="profile-head">
+            <span class="profile-title">iOS Compact Crisp</span>
+          </div>
+          <p class="profile-desc">Tighter optical width (86 / 84.5) for ultra-clean Status Bar, Quick Settings, and dense chats.</p>
+        </button>
+      </div>
+      <div id="reboot-banner" class="banner hidden">
+        Profile saved. Reboot your device to apply the new optical curve.
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-label">Engine Telemetry</div>
+      <dl class="kv-grid">
+        <div class="kv-row">
+          <dt>Active Profile</dt>
+          <dd id="kv-profile">—</dd>
+        </div>
+        <div class="kv-row">
+          <dt>Font XML</dt>
+          <dd id="kv-xml">—</dd>
+        </div>
+        <div class="kv-row">
+          <dt>Optical Width</dt>
+          <dd id="kv-wdth">—</dd>
+        </div>
+        <div class="kv-row">
+          <dt>Variable Fonts</dt>
+          <dd id="kv-mounted">—</dd>
+        </div>
+      </dl>
+    </section>
+
+    <footer class="footer">
+      CoreType v1.0.0 · Mystivara Ecosystem · Zero LSPosed
+    </footer>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

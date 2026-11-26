@@ -1,0 +1,14 @@
+# Build outputs & downloaded Apple font caches (never commit proprietary binaries)
+build/
+dist/
+*.zip
+*.dmg
+*.pkg
+system/fonts/*.ttf
+system/fonts/*.otf
+system/product/fonts/*.ttf
+system/etc/font_fallback.xml
+system/etc/fonts.xml
+__pycache__/
+*.pyc
+.DS_Store

@@ -1,0 +1,50 @@
+name: Build CoreType Module
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build & test dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq p7zip-full cpio shellcheck zip python3-fonttools
+
+      - name: Run POSIX test suite & ShellCheck
+        run: sh tests/run_tests.sh
+
+      - name: Build optical-calibrated SF Pro variable fonts
+        run: |
+          /usr/bin/python3 scripts/build_fonts.py --out-dir system/fonts
+          ls -lh system/fonts/
+
+      - name: Package flashable Magisk / KernelSU / APatch zip
+        run: |
+          VERSION=$(grep '^version=' module.prop | cut -d= -f2)
+          mkdir -p dist
+          zip -r9 "dist/CoreType-${VERSION}.zip" \
+            module.prop \
+            customize.sh \
+            post-fs-data.sh \
+            service.sh \
+            uninstall.sh \
+            lib/ \
+            system/ \
+            webroot/ \
+            -x '*.DS_Store'
+          ls -lh "dist/CoreType-${VERSION}.zip"
+
+      - name: Upload CoreType flashable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoreType-Flashable-Zip
+          path: dist/CoreType-*.zip
