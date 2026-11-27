@@ -52,4 +52,12 @@ python3 scripts/build_fonts.py --out-dir fonts
 sh tests/run_tests.sh
 ```
 
-> **Note on Licensing:** CoreType does not redistribute Apple's proprietary font binaries in Git. The automated build pipeline fetches and processes Apple's official public `SF-Pro.dmg` directly at build time.
+---
+
+## License & Legal Disclaimer
+
+- **Source Code (`MIT License`):** All original CoreType source code — including the C++20 `coretype-watchd` daemon, POSIX shell engine, Python optical build pipeline, WebUI, and automated test suite — is licensed under the [MIT License](LICENSE).
+- **No Proprietary Fonts in Git:** CoreType does **not** store or redistribute Apple's proprietary font binaries inside this Git repository. The build pipeline fetches public upstream packages strictly at build time.
+- **Trademarks & Third-Party Assets:** CoreType is an **independent, non-commercial** community project and is **not affiliated with, endorsed by, or sponsored by Apple Inc., Xiaomi Corp., or Google LLC**. *San Francisco (SF Pro)*, *CoreText*, and *Apple Color Emoji* are trademarks/copyrighted assets of **Apple Inc.**; *HyperOS* and *MiSans* are trademarks of **Xiaomi Corp.**; *Android* and *Google Sans* are trademarks of **Google LLC**.
+- **Personal / Educational Use & Takedown Compliance:** Any processed font outputs are intended strictly for personal, non-commercial customization and educational typography research. If you are a rights holder and believe any release asset should be removed, please open an issue or contact the maintainer and it will be taken down promptly.
+
