@@ -101,8 +101,11 @@
     if (emojiAvailable) {
       emojiToggle.disabled = false;
       emojiToggle.checked = wantedEmoji === "1";
+      const gmsBound = parseInt(st.gms_emoji_bound || "0", 10);
       document.getElementById("kv-emoji").textContent =
-        st.emoji_active === "1" ? "Active (iOS 26.4 · GMS-Aware)" : "Disabled (Stock Emoji)";
+        st.emoji_active === "1"
+          ? (gmsBound > 0 ? `Active (iOS 26.4 · ${gmsBound} GMS bound)` : "Active (iOS 26.4 · GMS-Aware)")
+          : "Disabled (Stock Emoji)";
     } else {
       emojiToggle.disabled = true;
       emojiToggle.checked = false;

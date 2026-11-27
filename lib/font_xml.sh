@@ -110,56 +110,57 @@ ct_emit_sans_serif_block() {
     printf '    <!-- CoreType Dual-Optical -->\n'
     printf '    %s\n' "$_open_tag"
     # Thin / Light (Lockscreen Clocks & Display Hero) -> SF Pro Display (opsz=28 + Display trak)
-    ct_emit_font_entry 100 normal display "$CT_WDTH_DISP" 150
-    ct_emit_font_entry 100 italic display "$CT_WDTH_DISP" 150
-    ct_emit_font_entry 200 normal display "$CT_WDTH_DISP" 230
-    ct_emit_font_entry 200 italic display "$CT_WDTH_DISP" 230
-    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP" 310
-    ct_emit_font_entry 300 italic display "$CT_WDTH_DISP" 310
-    # Body / Chat / Notifications / UI Labels -> SF Pro Text (opsz=17 + Text trak)
-    ct_emit_font_entry 350 normal text "$CT_WDTH_TEXT" 370
+    ct_emit_font_entry 100 normal display "$CT_WDTH_DISP" 170
+    ct_emit_font_entry 100 italic display "$CT_WDTH_DISP" 170
+    ct_emit_font_entry 200 normal display "$CT_WDTH_DISP" 250
+    ct_emit_font_entry 200 italic display "$CT_WDTH_DISP" 250
+    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP" 340
+    ct_emit_font_entry 300 italic display "$CT_WDTH_DISP" 340
+    # Body / Notes Editor / Chat / UI Labels -> SF Pro Text (opsz=17 + Text trak)
+    # Map HyperOS mipro-normal (350) to full 400 so Notes editor matches iOS Regular cleanly.
+    ct_emit_font_entry 350 normal text "$CT_WDTH_TEXT" 400
     ct_emit_font_entry 400 normal text "$CT_WDTH_TEXT" 400
     ct_emit_font_entry 400 italic text "$CT_WDTH_TEXT" 400
-    ct_emit_font_entry 500 normal text "$CT_WDTH_MID" 500
-    ct_emit_font_entry 500 italic text "$CT_WDTH_MID" 500
+    ct_emit_font_entry 500 normal text "$CT_WDTH_MID" 485
+    ct_emit_font_entry 500 italic text "$CT_WDTH_MID" 485
     # Headers / Section Labels / Bold -> SF Pro Display (opsz=28 + Display trak)
-    # Calibrated for HyperOS mipro weight offsets (mipro-demibold=700 -> iOS Semibold 590,
-    # mipro-semibold=800 -> iOS Bold 680, mipro-bold=900 -> iOS Heavy 760).
-    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP" 550
-    ct_emit_font_entry 600 italic display "$CT_WDTH_DISP" 550
-    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP" 590
-    ct_emit_font_entry 700 italic display "$CT_WDTH_DISP" 590
-    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP" 680
-    ct_emit_font_entry 800 italic display "$CT_WDTH_DISP" 680
-    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP" 760
-    ct_emit_font_entry 900 italic display "$CT_WDTH_DISP" 760
-    ct_emit_font_entry 950 normal display "$CT_WDTH_DISP" 850
+    # Harmonized for HyperOS mipro weight offsets so Saved networks (700) & Available networks (500)
+    # stay visually balanced rather than jarring.
+    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP" 535
+    ct_emit_font_entry 600 italic display "$CT_WDTH_DISP" 535
+    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP" 550
+    ct_emit_font_entry 700 italic display "$CT_WDTH_DISP" 550
+    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP" 650
+    ct_emit_font_entry 800 italic display "$CT_WDTH_DISP" 650
+    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP" 740
+    ct_emit_font_entry 900 italic display "$CT_WDTH_DISP" 740
+    ct_emit_font_entry 950 normal display "$CT_WDTH_DISP" 830
     printf '    </family>\n'
 }
 
 ct_emit_condensed_block() {
     _open_tag="$1"
     printf '    %s\n' "$_open_tag"
-    ct_emit_font_entry 300 normal display "$CT_WDTH_COND" 310
+    ct_emit_font_entry 300 normal display "$CT_WDTH_COND" 340
     ct_emit_font_entry 400 normal text "$CT_WDTH_COND" 400
     ct_emit_font_entry 400 italic text "$CT_WDTH_COND" 400
-    ct_emit_font_entry 500 normal text "$CT_WDTH_COND" 500
-    ct_emit_font_entry 600 normal display "$CT_WDTH_COND" 550
-    ct_emit_font_entry 700 normal display "$CT_WDTH_COND" 590
-    ct_emit_font_entry 700 italic display "$CT_WDTH_COND" 590
+    ct_emit_font_entry 500 normal text "$CT_WDTH_COND" 485
+    ct_emit_font_entry 600 normal display "$CT_WDTH_COND" 535
+    ct_emit_font_entry 700 normal display "$CT_WDTH_COND" 550
+    ct_emit_font_entry 700 italic display "$CT_WDTH_COND" 550
     printf '    </family>\n'
 }
 
 ct_emit_display_block() {
     _open_tag="$1"
     printf '    %s\n' "$_open_tag"
-    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP" 310
+    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP" 340
     ct_emit_font_entry 400 normal display "$CT_WDTH_DISP" 400
-    ct_emit_font_entry 500 normal display "$CT_WDTH_DISP" 500
-    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP" 550
-    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP" 590
-    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP" 680
-    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP" 760
+    ct_emit_font_entry 500 normal display "$CT_WDTH_DISP" 485
+    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP" 535
+    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP" 550
+    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP" 650
+    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP" 740
     printf '    </family>\n'
 }
 

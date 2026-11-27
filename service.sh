@@ -38,9 +38,19 @@ if [ "$_want_sz" -gt 102400 ] && [ "$_want_sz" = "$_live_sz" ]; then
     _font_ok="1"
 fi
 
+# Verify /product/fonts/MiSansVF.ttf mount status when MiSans slider is active
+_misans_prod_ok="0"
+if [ "${CT_MISANS_SLIDER_ACTIVE:-0}" = "1" ] && [ -r /product/fonts/MiSansVF.ttf ]; then
+    _mlive_sz=$(wc -c < /product/fonts/MiSansVF.ttf 2>/dev/null || echo 1)
+    if [ "$_want_sz" -gt 102400 ] && [ "$_want_sz" = "$_mlive_sz" ]; then
+        _misans_prod_ok="1"
+    fi
+fi
+
 # Verify Apple iOS Emoji availability & active status + catch late GMS emoji cache updates
 _emoji_avail="0"
 _emoji_active="0"
+CT_GMS_EMOJI_BOUND=0
 _want_emoji=$(ct_conf_get "applied_emoji" "1")
 if ct_emoji_master_valid "$MODDIR/fonts/CoreType-AppleEmoji.ttf"; then
     _emoji_avail="1"
@@ -87,12 +97,14 @@ ct_state_write_all \
     "slot_disp=$CT_SLOT_DISP" \
     "slot_ital=$CT_SLOT_ITAL" \
     "misans_slider=${CT_MISANS_SLIDER_ACTIVE:-0}" \
+    "misans_prod_mounted=$_misans_prod_ok" \
     "cjk_fallback=${CT_CJK_FALLBACK:-none}" \
     "emoji_available=$_emoji_avail" \
     "emoji_active=$_emoji_active" \
+    "gms_emoji_bound=${CT_GMS_EMOJI_BOUND:-0}" \
     "ota_status=$_ota_state" \
     "optical_engine=dual_master_gpos_trak_umount_safe" \
     "bootloop_guard=$_guard_state"
 
-ct_log "Boot verify: status=$_status profile=$CT_PROFILE xml=$_xml_active fonts=$_font_ok misans=${CT_MISANS_SLIDER_ACTIVE:-0} emoji=$_emoji_active/$_emoji_avail guard=$_guard_state"
+ct_log "Boot verify: status=$_status profile=$CT_PROFILE xml=$_xml_active fonts=$_font_ok misans=${CT_MISANS_SLIDER_ACTIVE:-0}/prod=$_misans_prod_ok emoji=$_emoji_active/$_emoji_avail/gms=${CT_GMS_EMOJI_BOUND:-0} guard=$_guard_state"
 ct_trim_log

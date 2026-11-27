@@ -143,8 +143,8 @@ assert_grep 'weight="400" style="normal">Roboto-Regular\.ttf' "$TMP_DIR/font_fal
 assert_grep 'weight="400" style="italic">RobotoFlex-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Body 400 italic routed to Italic slot"
 assert_grep 'weight="600" style="normal">RobotoStatic-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Header 600 routed to Display slot"
 assert_not_grep 'supportedAxes="wght,ital"' "$TMP_DIR/font_fallback.xml" "Eliminated duplicate Roboto-Regular fallback overwrite"
-assert_grep 'tag="wght" stylevalue="590"' "$TMP_DIR/font_fallback.xml" "Calibrated mipro-demibold (700) to wght=590"
-assert_grep 'tag="wght" stylevalue="680"' "$TMP_DIR/font_fallback.xml" "Calibrated mipro-semibold (800) to wght=680"
+assert_grep 'tag="wght" stylevalue="550"' "$TMP_DIR/font_fallback.xml" "Harmonized mipro-demibold (700) to wght=550"
+assert_grep 'tag="wght" stylevalue="650"' "$TMP_DIR/font_fallback.xml" "Harmonized mipro-semibold (800) to wght=650"
 assert_grep 'MiSansTCVF\.ttf' "$TMP_DIR/font_fallback.xml" "Redirected zh-Hans CJK fallback to MiSansTCVF.ttf (zero tofu!)"
 assert_not_grep 'MiSansVF\.ttf' "$TMP_DIR/font_fallback.xml" "Removed MiSansVF.ttf from zh-Hans when MiSans slider active"
 assert_grep 'MiSansArabicVF\.ttf' "$TMP_DIR/font_fallback.xml" "Preserved Arabic fallback"
@@ -255,6 +255,33 @@ if [ "$CT_EMOJI_AVAILABLE" = "1" ] && [ "$CT_EMOJI_ACTIVE" = "0" ] \
     pass "Emoji toggle OFF cleanly removes NotoColorEmoji slot while keeping available=1"
 else
     fail "Emoji toggle OFF failed"
+fi
+
+# Test GMS dynamic font + EmojiCompat opentype bind-mount discovery (mocked mount)
+MOCK_DF="$TMP_DIR/data_fonts"
+MOCK_GMS="$TMP_DIR/gms_opentype"
+MOCK_MOUNT_LOG="$TMP_DIR/mount.log"
+mkdir -p "$MOCK_DF/~~hash123==" "$MOCK_GMS"
+printf 'stock' > "$MOCK_DF/~~hash123==/NotoColorEmoji.ttf"
+printf 'stock' > "$MOCK_GMS/Noto_COLR_Emoji_Compat-400-100_0-0_0.ttf"
+printf 'stock' > "$MOCK_GMS/Noto_COLR_Emoji_No_Flags-400-100_0-0_0.ttf"
+printf 'stock' > "$MOCK_GMS/Google_Sans_Text-400-100_0-0_0.ttf"
+_bound_cnt=$(
+    mount() {
+        printf '%s\n' "$*" >> "$MOCK_MOUNT_LOG"
+        return 0
+    }
+    chcon() { return 0; }
+    ct_bind_gms_emoji_cache "$FAKE_MOD" "$MOCK_DF" "$MOCK_GMS"
+    printf '%s' "$CT_GMS_EMOJI_BOUND"
+)
+if [ "$_bound_cnt" = "3" ] \
+    && grep -q 'Noto_COLR_Emoji_Compat' "$MOCK_MOUNT_LOG" \
+    && grep -q 'Noto_COLR_Emoji_No_Flags' "$MOCK_MOUNT_LOG" \
+    && ! grep -q 'Google_Sans_Text' "$MOCK_MOUNT_LOG"; then
+    pass "GMS bind-mount covered /data/fonts + both EmojiCompat caches (3/3) while skipping Google_Sans_Text"
+else
+    fail "GMS bind-mount discovery failed (bound=$_bound_cnt)"
 fi
 
 # Simulate 2 failed boots and verify Bootloop Guard auto-disables module
