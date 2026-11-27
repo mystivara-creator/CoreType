@@ -3,225 +3,337 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
   <title>CoreType</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <!-- Frosted iOS 27 Liquid Glass Sticky Header -->
+  <header class="ios-nav glass-surface">
+    <div class="ios-nav-inner">
+      <div class="ios-nav-titles">
+        <span class="ios-eyebrow">Mystivara · HyperOS</span>
+        <h1 id="nav-title">CoreType</h1>
+      </div>
+      <span id="status-badge" class="status-pill badge-muted">Checking…</span>
+    </div>
+  </header>
+
   <main class="container">
-    <header class="hero">
-      <div class="hero-top">
-        <div>
-          <h1>CoreType</h1>
-          <p class="subtitle">Dual-Optical SF Pro &amp; iOS Emoji Engine</p>
-        </div>
-        <span id="status-badge" class="badge badge-muted">Checking…</span>
+    <!-- Reboot Required Floating Notice (only for XML / system slot changes — never GMS toggle) -->
+    <div id="reboot-banner" class="reboot-bar glass-surface hidden" role="status">
+      <div class="reboot-dot"></div>
+      <div class="reboot-copy">
+        <strong>Reboot Required</strong>
+        <span>System font XML or emoji slot updated. Reboot to apply.</span>
       </div>
-    </header>
+    </div>
 
-    <section class="card specimen-card">
-      <div class="card-label">Live System Specimen</div>
-      <div class="specimen-clock" id="specimen-clock">09:41</div>
-      <div class="specimen-header" id="specimen-header">Display &amp; Typography</div>
-      <div class="specimen-subhead" id="specimen-subhead">Dual Optical Master — Display vs Text</div>
-      <p class="specimen-body" id="specimen-body">
-        Headers &amp; clocks render with <strong>SF Pro Display</strong> (opsz 28, Apple Display tracking)
-        while paragraphs &amp; chats render with <em>SF Pro Text</em> (opsz 17, Apple Text tracking) —
-        zero layout bloat on HyperOS 1–4 &amp; Android 12–17.
-      </p>
-      <div class="specimen-emoji">✨ 🔥 🥹 🫶🏻 🎧 🇮🇩</div>
-      <div class="specimen-meta">
-        <span id="specimen-meta-curve">Body 400 · Medium 485 · Header 550 · Bold 650</span>
-        <span>opsz 17 Text (−46) · opsz 28 Display (−26)</span>
-      </div>
-    </section>
-
-    <section class="card">
-      <div class="card-label">Dynamic Weight Curve</div>
-
-      <div class="control-block">
-        <div class="control-head">
-          <div>
-            <div class="profile-title">Weight Bias</div>
-            <p class="profile-desc">Tapered perceptual shift across body &amp; UI labels (auto-clamped).</p>
-          </div>
-          <div class="control-actions">
-            <span id="bias-value" class="pill">0 · Standard</span>
-            <button id="bias-reset" class="reset-btn hidden" type="button">Reset</button>
-          </div>
+    <!-- ==================== TAB 1: TYPOGRAPHY ==================== -->
+    <section class="tab-panel active" id="tab-typography" data-tab="typography" role="tabpanel">
+      <!-- Live System Specimen -->
+      <div class="ios-group specimen-card">
+        <div class="specimen-top">
+          <span class="specimen-kicker">LIVE SYSTEM SPECIMEN</span>
+          <span class="specimen-chip">CoreText Parity</span>
         </div>
-        <div class="range-wrap">
-          <span class="range-label">Light</span>
-          <input type="range" id="weight-bias-slider" min="-60" max="80" step="5" value="0" aria-label="Weight Bias" />
-          <span class="range-label">Bold</span>
+        <div class="specimen-clock" id="specimen-clock">09:41</div>
+        <div class="specimen-header" id="specimen-header">Display &amp; Typography</div>
+        <div class="specimen-subhead" id="specimen-subhead">Dynamic Optical Master · Display vs Text</div>
+        <p class="specimen-body" id="specimen-body">
+          Headers &amp; clocks render with <strong>SF Pro Display</strong> (opsz 28, −26 UPM) while
+          paragraphs &amp; chats render with <em>SF Pro Text</em> (opsz 17, −46 UPM), and Material 3
+          shifts tracking dynamically via <code>opsz</code> FeatureVariations.
+        </p>
+        <div class="specimen-emoji">✨ 🔥 🥹 🫶🏻 🎧 🇮🇩</div>
+        <div class="specimen-meta">
+          <span id="specimen-meta-curve">Body 400 · Medium 485 · Header 550 · Bold 650</span>
+          <span>Flex opsz 17→28 (−46→−26)</span>
         </div>
       </div>
 
-      <div class="divider"></div>
-
-      <div class="control-block">
-        <div class="profile-title">Header Contrast</div>
-        <p class="profile-desc">Controls visual separation between body text (400) and section headers (600–800). Applies in HyperOS <strong>Default</strong> mode (while <strong>MiSans</strong> uses HyperOS's live slider).</p>
-        <div class="segmented" id="contrast-group" role="radiogroup" aria-label="Header Contrast">
-          <button class="seg-btn" data-contrast="soft" type="button">Soft</button>
-          <button class="seg-btn selected" data-contrast="balanced" type="button">Balanced</button>
-          <button class="seg-btn" data-contrast="apple_native" type="button">Apple Native</button>
-        </div>
-      </div>
-    </section>
-
-    <section class="card">
-      <div class="card-label">Ecosystem &amp; Emoji</div>
-
-      <div class="toggle-row">
-        <div class="toggle-info">
-          <div class="profile-title">Universal GMS App Fonts</div>
-          <p class="profile-desc">Non-destructive SF Pro bind for Play Store, Gmail, Maps, Photos &amp; Gboard.</p>
-        </div>
-        <label class="switch" aria-label="Toggle Universal GMS App Fonts">
-          <input type="checkbox" id="gms-fonts-toggle" checked />
-          <span class="slider"></span>
-        </label>
-      </div>
-
-      <div class="divider"></div>
-
-      <div class="toggle-row">
-        <div class="toggle-info">
-          <div class="profile-title" id="emoji-title">iOS 26.4 Color Emoji</div>
-          <p class="profile-desc" id="emoji-desc">GMS &amp; EmojiCompat aware CBDT/CBLC emoji with KernelSU-umount safety.</p>
-        </div>
-        <label class="switch" aria-label="Toggle Apple iOS Emoji">
-          <input type="checkbox" id="emoji-toggle" />
-          <span class="slider"></span>
-        </label>
-      </div>
-
-      <div class="divider"></div>
-
-      <div class="toggle-row">
-        <div class="toggle-info">
-          <div class="profile-title">Instant GMS Cache Sync</div>
-          <p class="profile-desc" id="sync-gms-desc">Event-driven via epoll + inotify (0% idle CPU, 0 wakelock). Tap to signal SIGUSR1 (&lt; 5 ms, live mount/umount2).</p>
-        </div>
-        <button id="sync-gms-btn" class="action-btn" type="button">Sync Now</button>
-      </div>
-
-      <div class="divider"></div>
-
-      <div class="toggle-row">
-        <div class="toggle-info">
-          <div class="profile-title">One-Tap Diagnostic Bundle</div>
-          <p class="profile-desc" id="diag-desc">Exports read-only telemetry, mount anti-duplication &amp; XML audit to /sdcard/Download/coretype-diag.txt.</p>
-        </div>
-        <button id="export-diag-btn" class="action-btn" type="button">Export Diagnostic</button>
-      </div>
-    </section>
-
-    <section class="card">
-      <div class="card-label">Optical Width Profile</div>
-      <div class="profile-list" id="profile-list">
-        <button class="profile-item" data-profile="dynamic_optical" type="button">
-          <div class="profile-head">
-            <span class="profile-title">iOS Optical Dynamic</span>
-            <span class="pill">Recommended</span>
-          </div>
-          <p class="profile-desc">Pure SF Pro shapes (wdth 96.5 / 97.0) + Apple iOS GPOS tracking for exact HyperOS &amp; iOS rhythm.</p>
+      <!-- Quick Presets -->
+      <div class="ios-section-header">Quick Presets</div>
+      <div class="preset-strip" id="preset-group" role="group" aria-label="Quick Typography Presets">
+        <button class="preset-pill interactive-glow selected" data-preset="apple_ref" data-bias="0" data-contrast="balanced" type="button">
+          <span class="preset-name">Apple Reference</span>
+          <span class="preset-sub">Bias 0 · Balanced</span>
         </button>
-
-        <button class="profile-item" data-profile="native_pro" type="button">
-          <div class="profile-head">
-            <span class="profile-title">iOS Native Pro</span>
-          </div>
-          <p class="profile-desc">100% uncompressed Apple width (wdth 100.0) with baked Apple iOS tracking curve.</p>
+        <button class="preset-pill interactive-glow" data-preset="crisp_light" data-bias="-20" data-contrast="soft" type="button">
+          <span class="preset-name">Crisp Light</span>
+          <span class="preset-sub">Bias −20 · Soft</span>
         </button>
-
-        <button class="profile-item" data-profile="compact_crisp" type="button">
-          <div class="profile-head">
-            <span class="profile-title">iOS Compact Crisp</span>
-          </div>
-          <p class="profile-desc">Tighter optical width (wdth 91.5 / 92.0) for ultra-clean Status Bar, Control Center, and dense chats.</p>
+        <button class="preset-pill interactive-glow" data-preset="bold_punchy" data-bias="30" data-contrast="apple_native" type="button">
+          <span class="preset-name">Bold Punchy</span>
+          <span class="preset-sub">Bias +30 · Native</span>
         </button>
       </div>
-      <div id="reboot-banner" class="banner hidden">
-        Changes saved. Reboot your device to apply.
+
+      <!-- Dynamic Weight Curve -->
+      <div class="ios-section-header">Dynamic Weight Curve</div>
+      <div class="ios-group">
+        <div class="ios-row-block">
+          <div class="row-head">
+            <div>
+              <div class="row-title">Weight Bias</div>
+              <div class="row-sub">Tapered perceptual shift across body &amp; UI labels</div>
+            </div>
+            <div class="row-right-inline">
+              <span id="bias-value" class="value-chip">0 · Standard</span>
+              <button id="bias-reset" class="text-btn hidden" type="button">Reset</button>
+            </div>
+          </div>
+          <div class="range-wrap">
+            <span class="range-edge">Light</span>
+            <input type="range" id="weight-bias-slider" min="-60" max="80" step="5" value="0" aria-label="Weight Bias" />
+            <span class="range-edge">Bold</span>
+          </div>
+        </div>
+
+        <div class="ios-sep"></div>
+
+        <div class="ios-row-block">
+          <div class="row-title">Header Contrast</div>
+          <div class="row-sub" style="margin-bottom:10px">Visual separation between body (400) &amp; section titles (600–800)</div>
+          <div class="ios-segmented" id="contrast-group" role="radiogroup" aria-label="Header Contrast">
+            <button class="seg-btn interactive-glow" data-contrast="soft" type="button">Soft</button>
+            <button class="seg-btn interactive-glow selected" data-contrast="balanced" type="button">Balanced</button>
+            <button class="seg-btn interactive-glow" data-contrast="apple_native" type="button">Apple Native</button>
+          </div>
+        </div>
+      </div>
+      <div class="ios-section-footer">
+        Applies in HyperOS <strong>Default</strong> font mode. HyperOS <strong>MiSans</strong> mode uses the native system Font Weight slider.
+      </div>
+
+      <!-- Optical Width Profile -->
+      <div class="ios-section-header">Optical Width Profile</div>
+      <div class="ios-group" id="profile-list">
+        <button class="ios-check-row interactive-glow" data-profile="dynamic_optical" type="button">
+          <div class="row-copy">
+            <div class="row-title-line">
+              <span class="row-title">iOS Optical Dynamic</span>
+              <span class="mini-tag">Recommended</span>
+            </div>
+            <div class="row-sub">Pure SF Pro shapes (wdth 96.5 / 97.0) + Apple GPOS tracking for zero HyperOS clipping.</div>
+          </div>
+          <span class="ios-checkmark" aria-hidden="true">✓</span>
+        </button>
+
+        <div class="ios-sep"></div>
+
+        <button class="ios-check-row interactive-glow" data-profile="native_pro" type="button">
+          <div class="row-copy">
+            <div class="row-title-line">
+              <span class="row-title">iOS Native Pro</span>
+            </div>
+            <div class="row-sub">100% uncompressed Apple width (wdth 100.0) with baked Apple iOS tracking curve.</div>
+          </div>
+          <span class="ios-checkmark" aria-hidden="true">✓</span>
+        </button>
+
+        <div class="ios-sep"></div>
+
+        <button class="ios-check-row interactive-glow" data-profile="compact_crisp" type="button">
+          <div class="row-copy">
+            <div class="row-title-line">
+              <span class="row-title">iOS Compact Crisp</span>
+            </div>
+            <div class="row-sub">Tighter optical width (wdth 91.5 / 92.0) for dense chats, Status Bar, and Control Center.</div>
+          </div>
+          <span class="ios-checkmark" aria-hidden="true">✓</span>
+        </button>
       </div>
     </section>
 
-    <section class="card">
-      <div class="telemetry-head">
-        <div class="card-label" style="margin-bottom:0">Live Engine Telemetry</div>
-        <span id="daemon-pill" class="pill pill-live">Checking…</span>
+    <!-- ==================== TAB 2: ECOSYSTEM ==================== -->
+    <section class="tab-panel" id="tab-ecosystem" data-tab="ecosystem" role="tabpanel">
+      <div class="ios-section-header">Instant Live-Apply (No Reboot)</div>
+      <div class="ios-group">
+        <div class="ios-row">
+          <div class="row-copy">
+            <div class="row-title-line">
+              <span class="row-title">Universal GMS App Fonts</span>
+              <span class="mini-tag mini-tag-green">Live</span>
+            </div>
+            <div class="row-sub">Non-destructive SF Pro + Flex + Semi-Display Bold bind for Play Store, Gmail, Maps, Photos &amp; Gboard. Excludes Google Sans Code.</div>
+          </div>
+          <label class="ios-switch" aria-label="Toggle Universal GMS App Fonts">
+            <input type="checkbox" id="gms-fonts-toggle" checked />
+            <span class="ios-slider"></span>
+          </label>
+        </div>
+
+        <div class="ios-sep"></div>
+
+        <div class="ios-row">
+          <div class="row-copy">
+            <div class="row-title">Instant GMS Cache Sync</div>
+            <div class="row-sub" id="sync-gms-desc">Event-driven epoll + inotify (0% idle CPU). Dispatches SIGUSR1 (&lt; 5 ms) for live mount / umount2.</div>
+          </div>
+          <button id="sync-gms-btn" class="ios-pill-btn interactive-glow" type="button">Sync Now</button>
+        </div>
+      </div>
+      <div class="ios-section-footer">
+        Toggling Universal GMS App Fonts automatically signals <code>coretype-watchd</code> via <code>SIGUSR1</code> — takes effect immediately with 0 reboot.
+      </div>
+
+      <div class="ios-section-header">System Emoji &amp; Diagnostics</div>
+      <div class="ios-group">
+        <div class="ios-row">
+          <div class="row-copy">
+            <div class="row-title" id="emoji-title">iOS 26.4 Color Emoji</div>
+            <div class="row-sub" id="emoji-desc">GMS &amp; EmojiCompat aware CBDT/CBLC emoji with KernelSU-umount safety.</div>
+          </div>
+          <label class="ios-switch" aria-label="Toggle Apple iOS Emoji">
+            <input type="checkbox" id="emoji-toggle" />
+            <span class="ios-slider"></span>
+          </label>
+        </div>
+
+        <div class="ios-sep"></div>
+
+        <div class="ios-row">
+          <div class="row-copy">
+            <div class="row-title">One-Tap Diagnostic Bundle</div>
+            <div class="row-sub" id="diag-desc">Read-only report (telemetry, mount anti-duplication &amp; XML audit) saved to /sdcard/Download/coretype-diag.txt.</div>
+          </div>
+          <button id="export-diag-btn" class="ios-pill-btn ios-pill-secondary interactive-glow" type="button">Export</button>
+        </div>
+      </div>
+      <div class="ios-section-footer">
+        In KernelSU / KernelSU-Next, keep global <strong>Umount modules OFF</strong> for daily apps and enable <strong>Custom → Umount modules ON</strong> only for banking apps.
+      </div>
+    </section>
+
+    <!-- ==================== TAB 3: ENGINE ==================== -->
+    <section class="tab-panel" id="tab-engine" data-tab="engine" role="tabpanel">
+      <div class="ios-section-header-row">
+        <span class="ios-section-header" style="margin:0">Live Engine Telemetry</span>
+        <span id="daemon-pill" class="mini-tag mini-tag-green">Checking…</span>
       </div>
 
       <div class="metric-grid">
-        <div class="metric-tile">
-          <div class="metric-label">Daemon RSS</div>
+        <div class="metric-tile ios-group">
+          <div class="metric-label">Private RAM</div>
           <div class="metric-value" id="tm-rss">—</div>
           <div class="metric-sub" id="tm-pid">PID —</div>
         </div>
-        <div class="metric-tile">
+        <div class="metric-tile ios-group">
           <div class="metric-label">Watch Health</div>
           <div class="metric-value" id="tm-health">—</div>
           <div class="metric-sub" id="tm-recoveries">0 recoveries</div>
         </div>
-        <div class="metric-tile">
+        <div class="metric-tile ios-group">
           <div class="metric-label">GMS Mounts</div>
           <div class="metric-value" id="tm-mounts">—</div>
           <div class="metric-sub" id="tm-mounts-sub">Latin · Emoji</div>
         </div>
-        <div class="metric-tile">
+        <div class="metric-tile ios-group">
           <div class="metric-label">Sync Latency</div>
           <div class="metric-value" id="tm-latency">—</div>
           <div class="metric-sub" id="tm-syncs">0 syncs</div>
         </div>
       </div>
 
-      <div class="divider"></div>
-
-      <dl class="kv-grid">
+      <div class="ios-section-header">System &amp; Optical Status</div>
+      <dl class="ios-group kv-list">
         <div class="kv-row">
           <dt>GPOS Tracking (Text / Display)</dt>
           <dd id="tm-trak">−46 / −26 UPM</dd>
         </div>
+        <div class="ios-sep"></div>
         <div class="kv-row">
           <dt>Active Profile</dt>
           <dd id="kv-profile">—</dd>
         </div>
+        <div class="ios-sep"></div>
         <div class="kv-row">
           <dt>Dynamic Weight Curve</dt>
           <dd id="kv-curve">—</dd>
         </div>
+        <div class="ios-sep"></div>
         <div class="kv-row">
           <dt>Continuous Flex (opsz)</dt>
           <dd id="kv-flex">—</dd>
         </div>
+        <div class="ios-sep"></div>
         <div class="kv-row">
           <dt>Stock Slots (Umount-Safe)</dt>
           <dd id="kv-slots">—</dd>
         </div>
+        <div class="ios-sep"></div>
         <div class="kv-row">
           <dt>HyperOS MiSans Slider</dt>
           <dd id="kv-misans">—</dd>
         </div>
+        <div class="ios-sep"></div>
         <div class="kv-row">
           <dt>Apple iOS Emoji</dt>
           <dd id="kv-emoji">—</dd>
         </div>
+        <div class="ios-sep"></div>
         <div class="kv-row">
           <dt>Active Font XML</dt>
           <dd id="kv-xml">—</dd>
         </div>
+        <div class="ios-sep"></div>
         <div class="kv-row">
           <dt>Bootloop &amp; OTA Guard</dt>
           <dd id="kv-guard">—</dd>
         </div>
       </dl>
-    </section>
 
-    <footer class="footer">
-      CoreType v1.2.0 · HyperOS 1–4 (Android 12–17) · Mystivara Ecosystem
-    </footer>
+      <div class="ios-section-header">WebUI Appearance</div>
+      <div class="ios-group">
+        <div class="ios-row">
+          <div class="row-copy">
+            <div class="row-title">Tinted Solid Surfaces</div>
+            <div class="row-sub">Replaces translucent Liquid Glass with high-contrast solid surfaces for extra legibility or low-end GPUs.</div>
+          </div>
+          <label class="ios-switch" aria-label="Toggle Tinted Solid Surfaces">
+            <input type="checkbox" id="reduced-glass-toggle" />
+            <span class="ios-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <footer class="footer">
+        CoreType v1.2.1 · HyperOS 1–4 (Android 12–17) · Mystivara Ecosystem
+      </footer>
+    </section>
   </main>
+
+  <!-- Floating iOS 27 Liquid Glass Pill Toast -->
+  <div id="ios-toast" class="ios-toast glass-surface" role="status" aria-live="polite">
+    <span class="toast-dot" id="toast-dot"></span>
+    <span id="toast-text">Applied live</span>
+  </div>
+
+  <!-- Floating iOS 27 Liquid Glass 3-Tab Bottom Dock -->
+  <nav class="ios-tabbar-wrap" aria-label="Primary Navigation">
+    <div class="ios-tabbar glass-surface" role="tablist">
+      <button class="tab-btn interactive-glow active" data-tab-target="typography" role="tab" aria-selected="true" type="button">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 19L10 5l6 14" /><path d="M6.3 14h7.4" /><path d="M16.5 19c1.9 0 3.5-1.1 3.5-3.2 0-2-1.4-3-3.2-3-1.4 0-2.5.7-2.8 1.6" />
+        </svg>
+        <span>Typography</span>
+      </button>
+      <button class="tab-btn interactive-glow" data-tab-target="ecosystem" role="tab" aria-selected="false" type="button">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="7.5" height="7.5" rx="2.2" /><rect x="13.5" y="3" width="7.5" height="7.5" rx="2.2" />
+          <rect x="3" y="13.5" width="7.5" height="7.5" rx="2.2" /><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2.2" />
+        </svg>
+        <span>Ecosystem</span>
+      </button>
+      <button class="tab-btn interactive-glow" data-tab-target="engine" role="tab" aria-selected="false" type="button">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 14a8 8 0 1 1 16 0" /><path d="M12 14l4-4" /><circle cx="12" cy="14" r="1.6" fill="currentColor" stroke="none" />
+        </svg>
+        <span>Engine</span>
+      </button>
+    </div>
+  </nav>
 
   <script src="app.js"></script>
 </body>

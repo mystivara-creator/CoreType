@@ -110,8 +110,11 @@ OPTICAL_SPECS = [
         "is_italic": False,
         "opsz": (17.0, 17.0, 28.0),
         "default_wdth": 96.5,
-        "track_units": -36,
-        "space_track": -15,
+        "track_units": -46,
+        "space_track": -18,
+        "display_track_units": -26,
+        "display_space_track": -12,
+        "opsz_switch_pt": 22.0,
         "family": "CoreType SF Pro Flex",
         "subfamily": "Regular",
         "ps_name": "CoreTypeSFProFlex-Regular",
@@ -223,23 +226,8 @@ def subset_font(font: TTFont) -> None:
     subsetter.subset(font)
 
 
-def bake_gpos_tracking(font: TTFont, track_units: int, space_track: int) -> int:
-    """
-    Inject Apple's calibrated iOS tracking as a non-destructive OpenType GPOS
-    SinglePos (LookupType 1) lookup attached to the default-on `kern` feature.
-
-    - Leaves `glyf`, `gvar`, `HVAR`, and composite diacritics 100% untouched.
-    - Skips zero-width combining marks and control glyphs.
-    - Uses gentler half-tracking on ultra-narrow glyphs (aw <= 450, e.g. `.`, `,`, `i`, `l`)
-      and dedicated `space_track` on space (`U+0020`) so words stay crisp and never collide.
-    """
-    if track_units == 0 or "GPOS" not in font:
-        return 0
-
-    gpos = font["GPOS"].table
-    if not gpos.LookupList or not gpos.FeatureList:
-        return 0
-
+def _build_tracking_lookup(font: "TTFont", track_units: int, space_track: int):
+    """Build a GPOS LookupType 1 (SinglePos Format 2) lookup for calibrated Apple tracking."""
     hmtx = font["hmtx"]
     cmap = font.getBestCmap() or {}
     glyph_order = font.getGlyphOrder()
@@ -281,7 +269,7 @@ def bake_gpos_tracking(font: TTFont, track_units: int, space_track: int) -> int:
 
         is_digit = (cp is not None and 0x0030 <= cp <= 0x0039) or gname.split(".")[0] in digit_prefixes
         if is_digit:
-            # Keep Display (-26) & Continuous-opsz Flex (-36) digits at pure 0 UPM; gentle -8 UPM on Text (-46)
+            # Keep Display (-26) digits at pure 0 UPM; gentle -8 UPM on Text (-46)
             if track_units >= -36:
                 continue
             delta = -8
@@ -307,7 +295,7 @@ def bake_gpos_tracking(font: TTFont, track_units: int, space_track: int) -> int:
         adjustments.append((glyph_id_map[gname], gname, val))
 
     if not adjustments:
-        return 0
+        return None, 0
 
     # Coverage table MUST be sorted by GlyphID per OpenType spec
     adjustments.sort(key=lambda item: item[0])
@@ -328,6 +316,25 @@ def bake_gpos_tracking(font: TTFont, track_units: int, space_track: int) -> int:
     lookup.LookupFlag = 0x0008  # IgnoreMarks (standard for horizontal kerning/tracking)
     lookup.SubTable = [subtable]
     lookup.SubTableCount = 1
+    return lookup, len(adjustments)
+
+
+def bake_gpos_tracking(font: "TTFont", track_units: int, space_track: int):
+    """
+    Inject Apple's calibrated iOS tracking as a non-destructive OpenType GPOS
+    SinglePos (LookupType 1) lookup attached to the default-on `kern` feature.
+    Returns (tracked_glyph_count, lookup_index).
+    """
+    if track_units == 0 or "GPOS" not in font:
+        return 0, None
+
+    gpos = font["GPOS"].table
+    if not gpos.LookupList or not gpos.FeatureList:
+        return 0, None
+
+    lookup, count = _build_tracking_lookup(font, track_units, space_track)
+    if lookup is None:
+        return 0, None
 
     new_lookup_idx = len(gpos.LookupList.Lookup)
     gpos.LookupList.Lookup.append(lookup)
@@ -343,7 +350,99 @@ def bake_gpos_tracking(font: TTFont, track_units: int, space_track: int) -> int:
     if attached == 0:
         raise RuntimeError("No GPOS 'kern' feature found to attach CoreType optical tracking")
 
-    return len(adjustments)
+    return count, new_lookup_idx
+
+
+def bake_gpos_opsz_feature_variations(
+    font: "TTFont",
+    default_lookup_idx: int,
+    display_track_units: int,
+    display_space_track: int,
+    opsz_switch_pt: float,
+) -> int:
+    """
+    Attach an OpenType GPOS 1.1 FeatureVariations record on `opsz` so CoreType-SFPro-Flex.ttf
+    automatically switches from Apple Text tracking (-46 UPM, opsz < 22) to Apple Display
+    tracking (-26 UPM, opsz >= 22) inside Android HarfBuzz / Minikin.
+    """
+    if default_lookup_idx is None or "GPOS" not in font or "fvar" not in font:
+        return 0
+
+    axes = font["fvar"].axes
+    opsz_idx = None
+    opsz_axis = None
+    for idx, axis in enumerate(axes):
+        if axis.axisTag == "opsz":
+            opsz_idx = idx
+            opsz_axis = axis
+            break
+    if opsz_axis is None or opsz_axis.maxValue <= opsz_axis.defaultValue:
+        return 0
+
+    norm_min = (opsz_switch_pt - opsz_axis.defaultValue) / (opsz_axis.maxValue - opsz_axis.defaultValue)
+    norm_min = max(0.0, min(1.0, norm_min))
+
+    disp_lookup, disp_count = _build_tracking_lookup(font, display_track_units, display_space_track)
+    if disp_lookup is None:
+        return 0
+
+    gpos = font["GPOS"].table
+    disp_lookup_idx = len(gpos.LookupList.Lookup)
+    gpos.LookupList.Lookup.append(disp_lookup)
+    gpos.LookupList.LookupCount = len(gpos.LookupList.Lookup)
+
+    # Build FeatureTableSubstitution records replacing default_lookup_idx -> disp_lookup_idx on all `kern` features
+    subst_records = []
+    for feat_idx, feat_rec in enumerate(gpos.FeatureList.FeatureRecord):
+        if feat_rec.FeatureTag != "kern":
+            continue
+        alt_feat = otTables.Feature()
+        alt_feat.FeatureParams = feat_rec.Feature.FeatureParams
+        alt_feat.LookupListIndex = [
+            disp_lookup_idx if li == default_lookup_idx else li
+            for li in feat_rec.Feature.LookupListIndex
+        ]
+        alt_feat.LookupCount = len(alt_feat.LookupListIndex)
+
+        sub_rec = otTables.FeatureTableSubstitutionRecord()
+        sub_rec.FeatureIndex = feat_idx
+        sub_rec.Feature = alt_feat
+        subst_records.append(sub_rec)
+
+    if not subst_records:
+        return 0
+
+    cond = otTables.ConditionTable()
+    cond.Format = 1
+    cond.AxisIndex = opsz_idx
+    cond.FilterRangeMinValue = norm_min
+    cond.FilterRangeMaxValue = 1.0
+
+    cond_set = otTables.ConditionSet()
+    cond_set.ConditionTable = [cond]
+    cond_set.ConditionCount = 1
+
+    feat_subst = otTables.FeatureTableSubstitution()
+    feat_subst.Version = 0x00010000
+    feat_subst.SubstitutionRecord = subst_records
+    feat_subst.SubstitutionCount = len(subst_records)
+
+    fvr = otTables.FeatureVariationRecord()
+    fvr.ConditionSet = cond_set
+    fvr.FeatureTableSubstitution = feat_subst
+
+    gpos.Version = 0x00010001  # GPOS 1.1 required for FeatureVariations
+    if getattr(gpos, "FeatureVariations", None) is None:
+        fv = otTables.FeatureVariations()
+        fv.Version = 0x00010000
+        fv.FeatureVariationRecord = [fvr]
+        fv.FeatureVariationCount = 1
+        gpos.FeatureVariations = fv
+    else:
+        gpos.FeatureVariations.FeatureVariationRecord.append(fvr)
+        gpos.FeatureVariations.FeatureVariationCount = len(gpos.FeatureVariations.FeatureVariationRecord)
+
+    return disp_count
 
 
 def calibrate_vertical_metrics(font: "TTFont") -> None:
@@ -404,7 +503,16 @@ def build_optical_master(src_path: Path, out_path: Path, spec: dict) -> None:
 
     font = instantiateVariableFont(font, axis_limits, inplace=True)
 
-    tracked = bake_gpos_tracking(font, spec["track_units"], spec["space_track"])
+    tracked, default_lookup_idx = bake_gpos_tracking(font, spec["track_units"], spec["space_track"])
+    fv_tracked = 0
+    if "display_track_units" in spec and default_lookup_idx is not None:
+        fv_tracked = bake_gpos_opsz_feature_variations(
+            font,
+            default_lookup_idx,
+            spec["display_track_units"],
+            spec["display_space_track"],
+            spec.get("opsz_switch_pt", 22.0),
+        )
     calibrate_vertical_metrics(font)
     set_name_records(font, spec["family"], spec["subfamily"], spec["ps_name"])
 
@@ -418,9 +526,14 @@ def build_optical_master(src_path: Path, out_path: Path, spec: dict) -> None:
         for a in verify["fvar"].axes
     ]
     size_kb = out_path.stat().st_size / 1024.0
+    fv_note = (
+        f" + FeatureVariations(opsz>={spec.get('opsz_switch_pt', 22.0):.0f}: {spec['display_track_units']} UPM, {fv_tracked} glyphs)"
+        if fv_tracked > 0
+        else ""
+    )
     print(
         f"           wrote {out_path.name} ({size_kb:.1f} KB) | "
-        f"tracked={tracked} glyphs ({spec['track_units']} UPM) | axes: {', '.join(axes_summary)}"
+        f"tracked={tracked} glyphs ({spec['track_units']} UPM){fv_note} | axes: {', '.join(axes_summary)}"
     )
 
 
@@ -434,9 +547,9 @@ GMS_STATIC_SPECS = [
         "ps_name": "CoreTypeSFProText-Medium",
     },
     {
-        "src_master": "CoreType-SFPro-Display.ttf",
+        "src_master": "CoreType-SFPro-Flex.ttf",
         "out": "CoreType-SFPro-GMS-Bold.ttf",
-        "coords": {"wght": 600.0, "wdth": 97.0},
+        "coords": {"opsz": 24.0, "wght": 600.0, "wdth": 97.0},
         "family": "CoreType SF Pro Display",
         "subfamily": "Semibold",
         "ps_name": "CoreTypeSFProDisplay-Semibold",
@@ -448,8 +561,8 @@ def build_gms_static_instances(out_dir: Path) -> None:
     """
     Build two ultra-lean static SF Pro instances (~250 KB each) from our already-calibrated
     Variable Masters so static GMS FontsProvider targets (Google_Sans_Text-500, Google_Sans-700,
-    etc. in Play Store, Gmail, Maps, Photos, Gboard) render genuine Apple Medium/Semibold weight
-    instead of falling back to flat Regular (400) or synthetic Skia faux-bold.
+    etc. in Play Store, Gmail, Maps, Photos, Gboard) render genuine Apple Medium (Text opsz=17)
+    and Semibold/Bold (Semi-Display opsz=24) instead of falling back to flat Regular (400).
     """
     for spec in GMS_STATIC_SPECS:
         src_path = out_dir / spec["src_master"]
@@ -467,7 +580,7 @@ def build_gms_static_instances(out_dir: Path) -> None:
 
 
 def audit_built_fonts(out_dir: Path) -> None:
-    """Verify OS/2 & hhea vertical metrics parity, USE_TYPO_METRICS, and continuous opsz on Flex."""
+    """Verify OS/2 & hhea vertical metrics parity, USE_TYPO_METRICS, and continuous opsz + FeatureVariations on Flex."""
     expected_files = [s["out"] for s in OPTICAL_SPECS] + [s["out"] for s in GMS_STATIC_SPECS]
     for fname in expected_files:
         fpath = out_dir / fname
@@ -498,10 +611,16 @@ def audit_built_fonts(out_dir: Path) -> None:
                 f"Flex opsz range invalid: {axes['opsz']} (expected continuous 17..28)"
             )
             assert "wght" in axes and "wdth" in axes, f"Flex missing wght/wdth axes: {axes}"
+            gpos = font["GPOS"].table
+            fv = getattr(gpos, "FeatureVariations", None)
+            assert gpos.Version == 0x00010001 and fv is not None and fv.FeatureVariationCount >= 1, (
+                "CoreType-SFPro-Flex.ttf missing GPOS 1.1 FeatureVariations for dynamic opsz tracking!"
+            )
 
     print(
-        f"[CoreType] Vertical metrics & optical axis audit PASSED "
-        f"(ascent={ANDROID_ASCENT}, descent={ANDROID_DESCENT}, ratio={(ANDROID_ASCENT - ANDROID_DESCENT)/2048.0:.4f}, Flex opsz=17..28 [12..36sp CoreText clamp])"
+        f"[CoreType] Vertical metrics, continuous opsz & GPOS FeatureVariations audit PASSED "
+        f"(ascent={ANDROID_ASCENT}, descent={ANDROID_DESCENT}, ratio={(ANDROID_ASCENT - ANDROID_DESCENT)/2048.0:.4f}, "
+        f"Flex opsz=17..28 [-46->-26 UPM], GMS-Bold opsz=24)"
     )
 
 
@@ -517,6 +636,13 @@ def self_test_specs() -> int:
 
     flex_specs = [s for s in OPTICAL_SPECS if s["out"] == "CoreType-SFPro-Flex.ttf"]
     assert len(flex_specs) == 1 and flex_specs[0]["opsz"] == (17.0, 17.0, 28.0), "Flex opsz must preserve Apple 17..28 domain"
+    assert flex_specs[0]["track_units"] == -46 and flex_specs[0]["display_track_units"] == -26, (
+        "Flex dynamic FeatureVariations must transition -46 Text -> -26 Display"
+    )
+    gms_bold = [s for s in GMS_STATIC_SPECS if s["out"] == "CoreType-SFPro-GMS-Bold.ttf"]
+    assert len(gms_bold) == 1 and gms_bold[0]["coords"].get("opsz") == 24.0, (
+        "GMS Bold static instance must use Semi-Display opsz=24.0"
+    )
     assert "tnum" in UI_LAYOUT_FEATURES and "calt" in UI_LAYOUT_FEATURES and "kern" in UI_LAYOUT_FEATURES
 
     # Verify Unicode preservation (Phonetic Extensions 'ʲᵈᵐ', Latin, digits) & PUA/Arabic exclusion
@@ -527,7 +653,8 @@ def self_test_specs() -> int:
 
     print(
         f"[PASS] build_fonts.py audit OK: metrics={ANDROID_ASCENT}/{ANDROID_DESCENT} "
-        f"(ratio={ratio:.4f}, ascent={ascent_share*100:.1f}%), Flex opsz=17..28, tnum+calt+Unicode verified"
+        f"(ratio={ratio:.4f}, ascent={ascent_share*100:.1f}%), Flex opsz=17..28 FeatureVariations(-46->-26), "
+        f"GMS-Bold opsz=24, tnum+calt+Unicode verified"
     )
     return 0
 

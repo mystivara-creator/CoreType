@@ -72,9 +72,10 @@ jobs:
           c_clock = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "09:41"], text=True))[2]["g"]
           c_text  = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "a:b"], text=True))[1]["g"]
           assert c_clock != c_text, "Apple calt centered clock colon did not activate!"
-          for df in ("fonts/CoreType-SFPro-Display.ttf", "fonts/CoreType-SFPro-Flex.ttf"):
-              d_100 = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", df, "100"], text=True))
-              assert all(g["dx"] == 0 for g in d_100), f"Unexpected negative tracking on digits in {df}: {d_100}"
+          d_disp = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "100"], text=True))
+          assert all(g["dx"] == 0 for g in d_disp), f"Unexpected negative tracking on Display digits: {d_disp}"
+          d_flex_disp = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=28,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "100"], text=True))
+          assert all(g["dx"] == 0 for g in d_flex_disp), f"Unexpected negative tracking on Flex Display (opsz=28) digits: {d_flex_disp}"
           flex_12 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=12,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
           flex_22 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=22,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
           flex_36 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=36,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
@@ -82,9 +83,12 @@ jobs:
           w22 = sum(g["ax"] for g in flex_22)
           w36 = sum(g["ax"] for g in flex_36)
           assert w12 != w22 and w22 != w36 and w12 != w36, f"Flex continuous opsz axis had no visual advance delta ({w12} / {w22} / {w36})!"
+          dx_text = min(g["dx"] for g in flex_12)
+          dx_disp = min(g["dx"] for g in flex_36)
+          assert dx_text < dx_disp < 0, f"Flex GPOS FeatureVariations did not relax tracking from Text to Display (dx_text={dx_text}, dx_disp={dx_disp})!"
           s_jdm = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Text.ttf", "Yanz 25 \u02b2\u1d48\u1d50"], text=True))
           assert all(g["g"] != ".notdef" for g in s_jdm), f"Missing superscript glyph in Phonetic Extensions: {s_jdm}"
-          print(f"[PASS] HarfBuzz GPOS tracking, Flex continuous opsz (12:{w12} -> 22:{w22} -> 36:{w36}), pure digit spacing (100), Phonetic Extensions (jdm) & Apple calt colon verified ({c_text} -> {c_clock})")
+          print(f"[PASS] HarfBuzz GPOS tracking, Flex continuous opsz (12:{w12} -> 22:{w22} -> 36:{w36}) + FeatureVariations (dx {dx_text}->{dx_disp}), pure digit spacing (100), Phonetic Extensions & Apple calt colon verified ({c_text} -> {c_clock})")
           PY
 
       - name: Package CoreType Lite (SF Pro Only)
@@ -153,7 +157,7 @@ jobs:
           LITE_SZ=$(du -h "$LITE_ZIP" | awk '{print $1}')
 
           cat > /tmp/release_notes.md <<EOF
-          **CoreType ${TAG}** — Native Apple CoreText-Parity San Francisco Pro (iOS 27.x) & Apple iOS 26.4 Color Emoji engine exclusively engineered for **HyperOS 1 / 2 / 3 / 4 & Android 12–17 (ARM64)** (**Zero LSPosed**, Magisk / KernelSU / KernelSU-Next / APatch).
+          **CoreType ${TAG}** — Native Apple CoreText-Parity San Francisco Pro (iOS 27.x) & Apple iOS 26.4 Color Emoji engine exclusively engineered for **HyperOS 1 / 2 / 3 / 4 & Android 12–17 (ARM64)** (Magisk / KernelSU / KernelSU-Next / APatch).
 
           ---
 
@@ -166,17 +170,20 @@ jobs:
           ---
 
           ### Highlights
-          - **Native C++20 Event-Driven Daemon (\`coretype-watchd\`, ARM64):** Zero-polling \`epoll\` + \`inotify\` + dual \`timerfd\` (250 ms batch debounce + bounded \`1s → 3s → 10s\` self-healing recovery) + \`signalfd\` (< 300 KB RSS, 0% idle CPU, 0 wakelock, isolated \`/dev/.coretype/\`). Auto-recovers from HyperOS Security Cleaner / GMS *Clear Data*, supports live \`umount2(MNT_DETACH)\` on WebUI toggle OFF, and instant \`SIGUSR1\` sync (< 5 ms).
-          - **Continuous Optical Sizing (\`opsz\`) & 4:1 Vertical Metrics Parity:** Dedicated \`RobotoFlex-Regular.ttf\` continuous optical master + \`1968 / −492\` (4:1 ratio) metrics matching HyperOS \`MiSansTCVF\` / \`NotoSansCJK\`, preserving \`tnum\`, \`calt\` (\`09:41\`), and stock \`MiClock*.otf\`.
-          - **Dynamic Weight Curve Engine:** ROM-aware auto-calibration + WebUI **Weight Bias** slider (\`-60\` to \`+80\`) & **Header Contrast** (\`Soft\` / \`Balanced\` / \`Apple Native\`) with real-time Live Specimen preview.
-          - **Universal HyperOS & GMS Ecosystem Fonts + Apple iOS 26.4 Emoji:** Non-destructive read-only bind-mounting for Play Store, Gmail, Maps, Photos, Gboard (\`Google_Sans*\` Regular/Medium/Semibold/Italic) and GMS \`EmojiCompat\` caches.
-          - **Live Engine Telemetry & One-Tap Diagnostic (\`action.sh --diag\`):** Real-time WebUI visibility into \`watch_health\`, \`watch_recoveries\`, \`VmRSS\`, GMS mounts, sync latency, and one-tap export to \`/sdcard/Download/coretype-diag.txt\`.
+          - **Dynamic \`opsz\`-Aware GPOS \`FeatureVariations\` & Semi-Display GMS Bold:** \`CoreType-SFPro-Flex.ttf\` (\`RobotoFlex-Regular.ttf\`) automatically transitions Apple tracking from **−46 UPM** (Text, \`opsz < 22\`) to **−26 UPM** (Display, \`opsz >= 22\`) inside Android HarfBuzz/Minikin, while \`CoreType-SFPro-GMS-Bold.ttf\` uses **Semi-Display (\`opsz=24\`)** proportions for crisp iOS-style headings across Play Store, Gmail, Maps, Photos, and Gboard (excluding \`Google_Sans_Code\` monospace).
+          - **iOS 27 Liquid Glass & Settings Native 3-Tab WebUI:** Auto Light & Dark (\`prefers-color-scheme\`) with layered Liquid Glass lensing, interactive pointer inner-glow, **3-Tab Bottom Dock** (\`Typography\` · \`Ecosystem\` · \`Engine\`), **3 Quick Curve Presets**, **Instant Live-Apply** for Universal GMS App Fonts (\`SIGUSR1 < 5 ms\`, zero reboot), and **Tinted Solid Surfaces** accessibility mode (\`prefers-reduced-transparency\`).
+          - **Native C++20 Event-Driven Daemon (\`coretype-watchd\`, ARM64):** Zero-polling \`epoll\` + \`inotify\` + dual \`timerfd\` (250 ms batch debounce + bounded \`1s → 3s → 10s\` self-healing recovery) + \`signalfd\` (< 300 KB private RAM, 0% idle CPU, 0 wakelock, isolated \`/dev/.coretype/\`). Reports \`daemon_private_kb\` alongside \`daemon_rss_kb\`, supports live \`umount2(MNT_DETACH)\` on toggle OFF, and syncs live mount counts cleanly into \`state.prop\` & \`action.sh --diag\`.
+          - **4:1 Vertical Metrics Parity, Dynamic Weight Curve & Apple iOS 26.4 Emoji:** \`1968 / −492\` CJK-aligned metrics, \`tnum\` + \`calt\` (\`09:41\`), stock \`MiClock*.otf\` preservation, MiSans Font Weight slider support, and KernelSU-umount-safe Apple iOS 26.4 Color Emoji.
 
           ---
 
           ### KernelSU / KernelSU-Next Note
           - Keep global **\`Umount modules\`** **OFF** (with \`Superuser\` **OFF**) for everyday apps where you want SF Pro & Apple iOS Emoji, and enable \`Custom → Umount modules = ON\` specifically for banking / e-wallet apps.
           - If Gboard retains old Google emoji previews on first boot, clear **Gboard cache** once (not data).
+
+          ---
+
+          <sub>*Source code is licensed under MIT. CoreType is an independent, non-commercial community project not affiliated with Apple Inc., Xiaomi Corp., or Google LLC.*</sub>
           EOF
 
           if gh release view "$TAG" >/dev/null 2>&1; then
