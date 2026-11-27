@@ -424,28 +424,69 @@ if [ -n "$_cxx" ]; then
 
         if [ -s "$WD_RUN/telemetry.prop" ] \
             && grep -q '^daemon_mode=native-epoll$' "$WD_RUN/telemetry.prop" \
+            && grep -q '^watch_health=healthy$' "$WD_RUN/telemetry.prop" \
+            && grep -q '^watch_recoveries=0$' "$WD_RUN/telemetry.prop" \
             && grep -q '^sync_count=1$' "$WD_RUN/telemetry.prop" \
             && grep -q '^active_text_tracking_upm=-46$' "$WD_RUN/telemetry.prop" \
             && grep -q '^active_display_tracking_upm=-26$' "$WD_RUN/telemetry.prop"; then
-            pass "coretype-watchd booted in epoll mode & emitted valid telemetry.prop"
+            pass "coretype-watchd booted in epoll mode & emitted valid telemetry.prop (watch_health=healthy)"
         else
             fail "coretype-watchd initial telemetry.prop invalid or missing"
         fi
 
+        # Simulate HyperOS Security Cleaner / GMS Clear Data: rm -rf opentype, wait 400ms, recreate
+        rm -rf "$WD_GMS/fonts/opentype"
+        sleep 0.4 2>/dev/null || sleep 1
+        mkdir -p "$WD_GMS/fonts/opentype"
+        printf 'mockttf' > "$WD_GMS/fonts/opentype/Google_Sans_Text-400-100_0-0_0.ttf"
+
+        _rtry=0
+        _recovered=0
+        while [ "$_rtry" -lt 40 ]; do
+            _wh=$(awk -F= '$1=="watch_health"{print $2;exit}' "$WD_RUN/telemetry.prop" 2>/dev/null || true)
+            _wr=$(awk -F= '$1=="watch_recoveries"{print $2;exit}' "$WD_RUN/telemetry.prop" 2>/dev/null || echo 0)
+            if [ "$_wh" = "healthy" ] && [ "${_wr:-0}" -ge 1 ]; then
+                _recovered=1
+                break
+            fi
+            sleep 0.1 2>/dev/null || sleep 1
+            _rtry=$((_rtry + 1))
+        done
+        if [ "$_recovered" = "1" ]; then
+            pass "Self-healing inotify recovered after rm -rf/recreate (watch_health=healthy, watch_recoveries=${_wr})"
+        else
+            fail "Self-healing inotify did not recover (watch_health=${_wh:-unknown}, watch_recoveries=${_wr:-0})"
+        fi
+
         # Verify SIGUSR1 triggers instant on-demand sync (< 5 ms)
+        _sc_before=$(awk -F= '$1=="sync_count"{print $2;exit}' "$WD_RUN/telemetry.prop" 2>/dev/null || echo 0)
         kill -USR1 "$_wpid" 2>/dev/null || true
         _stry=0
+        _sc_after="$_sc_before"
         while [ "$_stry" -lt 20 ]; do
-            if grep -q '^sync_count=2$' "$WD_RUN/telemetry.prop" 2>/dev/null; then
+            _sc_after=$(awk -F= '$1=="sync_count"{print $2;exit}' "$WD_RUN/telemetry.prop" 2>/dev/null || echo 0)
+            if [ "$_sc_after" -gt "$_sc_before" ]; then
                 break
             fi
             sleep 0.05 2>/dev/null || sleep 1
             _stry=$((_stry + 1))
         done
-        if grep -q '^sync_count=2$' "$WD_RUN/telemetry.prop" 2>/dev/null; then
-            pass "SIGUSR1 triggered instant on-demand sync (sync_count=2)"
+        if [ "$_sc_after" -gt "$_sc_before" ]; then
+            pass "SIGUSR1 triggered instant on-demand sync (sync_count ${_sc_before} -> ${_sc_after})"
         else
-            fail "SIGUSR1 did not increment sync_count"
+            fail "SIGUSR1 did not increment sync_count (stayed ${_sc_before})"
+        fi
+
+        # Verify One-Tap Diagnostic Bundle (action.sh --diag)
+        DIAG_OUT="$TMP_DIR/coretype-diag.txt"
+        if CT_RUN_DIR="$WD_RUN" CT_DATA_DIR="$WD_DATA" sh "$REPO_ROOT/action.sh" --diag "$DIAG_OUT" >/dev/null \
+            && [ -s "$DIAG_OUT" ] \
+            && grep -q 'daemon_mode=native-epoll' "$DIAG_OUT" \
+            && grep -q 'watch_health=healthy' "$DIAG_OUT" \
+            && grep -q 'duplicate_mounts=' "$DIAG_OUT"; then
+            pass "One-tap diagnostic export (action.sh --diag) generated clean read-only bundle"
+        else
+            fail "action.sh --diag failed or missing required sections"
         fi
 
         # Verify SIGTERM graceful shutdown & /dev/.coretype cleanup

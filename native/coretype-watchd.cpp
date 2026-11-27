@@ -3,8 +3,9 @@
 #endif
 
 // CoreType — Native C++20 Event-Driven Typography Watcher (coretype-watchd)
-// Zero-polling epoll + inotify + timerfd + signalfd daemon for HyperOS & Android 12–16.
+// Zero-polling epoll + inotify + dual timerfd (250ms debounce + bounded recovery backoff) + signalfd.
 // Target footprint: < 300 KB VmRSS, 0% idle CPU, 0 wakelock, 100% orthogonal to hardware daemons.
+// Compatible with HyperOS 1 / 2 / 3 / 4 & Android 12–17 (arm64-v8a / aarch64).
 
 #include <cerrno>
 #include <chrono>
@@ -35,9 +36,15 @@
 #define CLONE_NEWNS 0x00020000
 #endif
 
+#ifndef MNT_DETACH
+#define MNT_DETACH 2
+#endif
+
 namespace {
 
 constexpr int kDebounceMs = 250;
+constexpr int kRecoveryBackoffMs[] = {1000, 3000, 10000};
+constexpr int kRecoveryStepCount = 3;
 constexpr int kTextTrackingUpm = -46;
 constexpr int kDisplayTrackingUpm = -26;
 constexpr char kSelinuxSystemFile[] = "u:object_r:system_file:s0";
@@ -183,6 +190,11 @@ bool ends_with(std::string_view s, std::string_view suffix) {
     return s.size() >= suffix.size() && s.substr(s.size() - suffix.size()) == suffix;
 }
 
+std::string_view path_basename(std::string_view p) {
+    size_t slash = p.rfind('/');
+    return (slash == std::string_view::npos) ? p : p.substr(slash + 1);
+}
+
 int read_self_rss_kb() {
     const std::string status = read_small_file("/proc/self/status");
     size_t pos = status.find("VmRSS:");
@@ -242,8 +254,6 @@ std::unordered_set<std::string> load_active_mounts() {
         size_t end = data.find('\n', start);
         if (end == std::string::npos) end = data.size();
         std::string_view line(data.data() + start, end - start);
-        // mountinfo field index 4 (5th space-separated token) is the mount point;
-        // /proc/mounts field index 1 (2nd token) is the mount point.
         int target_field = use_mountinfo ? 4 : 1;
         int field = 0;
         size_t i = 0;
@@ -289,6 +299,34 @@ bool is_latin_ui_gms_font(std::string_view base) {
     return starts_with(base, "Google_Sans") || starts_with(base, "GoogleSans") ||
            starts_with(base, "Product_Sans") || starts_with(base, "ProductSans") ||
            starts_with(base, "Roboto") || starts_with(base, "Inter");
+}
+
+bool is_managed_latin_mount(const Config& cfg, std::string_view mpath) {
+    if (mpath.find("/fonts/opentype/") == std::string_view::npos) return false;
+    if (!starts_with(mpath, cfg.gms_files_root) &&
+        mpath.find("/com.google.android.gms/files/fonts/opentype/") == std::string_view::npos) {
+        return false;
+    }
+    return is_latin_ui_gms_font(path_basename(mpath));
+}
+
+bool is_managed_emoji_mount(const Config& cfg, std::string_view mpath) {
+    std::string_view base = path_basename(mpath);
+    if (!ends_with(base, ".ttf") || !contains_ci(base, "emoji")) return false;
+    if (starts_with(mpath, cfg.data_fonts_root + "/") && base == "NotoColorEmoji.ttf") {
+        return true;
+    }
+    if (starts_with(mpath, cfg.gms_files_root + "/fonts/opentype/")) {
+        return true;
+    }
+    if (mpath.find("/com.google.android.gms/files/fonts/opentype/") != std::string_view::npos) {
+        return true;
+    }
+    if (mpath.find("/com.facebook.") != std::string_view::npos &&
+        mpath.find("/app_ras_blobs/") != std::string_view::npos) {
+        return true;
+    }
+    return false;
 }
 
 std::string select_sfpro_source(const Config& cfg, std::string_view fname) {
@@ -346,6 +384,24 @@ bool bind_ro_idempotent(const std::string& src, const std::string& dst,
     return false;
 }
 
+void detach_disabled_mounts(const Config& cfg, bool want_latin, bool want_emoji,
+                            std::unordered_set<std::string>& mounted) {
+    if (want_latin && want_emoji) return;
+    std::vector<std::string> to_detach;
+    for (const auto& m : mounted) {
+        if (!want_latin && is_managed_latin_mount(cfg, m)) {
+            to_detach.push_back(m);
+        } else if (!want_emoji && is_managed_emoji_mount(cfg, m)) {
+            to_detach.push_back(m);
+        }
+    }
+    for (const auto& dst : to_detach) {
+        if (::umount2(dst.c_str(), MNT_DETACH) == 0) {
+            mounted.erase(dst);
+        }
+    }
+}
+
 void list_dir_entries(const std::string& dir, std::vector<std::string>& out) {
     DIR* d = ::opendir(dir.c_str());
     if (!d) return;
@@ -390,17 +446,23 @@ SyncStats perform_sync(const Config& cfg) {
     const std::string state_path = cfg.datadir + "/state.prop";
     const std::string conf_path = cfg.datadir + "/config.conf";
 
-    std::string gms_latin_flag = read_prop_value(state_path, "gms_fonts_enabled", "");
+    // Prefer live WebUI config.conf toggle first so SIGUSR1 / Sync Now can live-unmount immediately
+    std::string gms_latin_flag = read_prop_value(conf_path, "gms_fonts_enabled", "");
     if (gms_latin_flag.empty()) {
-        gms_latin_flag = read_prop_value(conf_path, "applied_gms_fonts", "1");
+        gms_latin_flag = read_prop_value(state_path, "gms_fonts_enabled", "1");
     }
-    std::string emoji_flag = read_prop_value(state_path, "emoji_active", "");
+    std::string emoji_flag = read_prop_value(conf_path, "emoji_enabled", "");
     if (emoji_flag.empty()) {
-        emoji_flag = read_prop_value(conf_path, "applied_emoji", "1");
+        emoji_flag = read_prop_value(state_path, "emoji_active", "1");
     }
 
     const bool want_latin = (gms_latin_flag != "0");
     const bool want_emoji = (emoji_flag != "0");
+
+    std::unordered_set<std::string> mounted = load_active_mounts();
+
+    // Live-unmount any previously active GMS mounts when user toggles OFF in WebUI
+    detach_disabled_mounts(cfg, want_latin, want_emoji, mounted);
 
     const std::string fdir = cfg.moddir + "/fonts/";
     if (want_latin) {
@@ -425,8 +487,6 @@ SyncStats perform_sync(const Config& cfg) {
         }
     }
 
-    std::unordered_set<std::string> mounted = load_active_mounts();
-
     // 1. Android FontManagerService dynamic emoji cache (/data/fonts/files/*/NotoColorEmoji.ttf)
     if (want_emoji && !emoji_src.empty() && dir_exists(cfg.data_fonts_root)) {
         std::vector<std::string> subdirs;
@@ -445,7 +505,7 @@ SyncStats perform_sync(const Config& cfg) {
         sync_gms_opentype_dir(cfg, primary_ot, want_latin, want_emoji, emoji_src, mounted, stats);
     }
 
-    // 3. Secondary Android users & existing Meta app_ras_blobs (only when using live default GMS root)
+    // 3. Secondary Android users & existing Meta app_ras_blobs (live default GMS root only)
     if (cfg.gms_files_root == "/data/data/com.google.android.gms/files") {
         std::vector<std::string> users;
         list_dir_entries("/data/user", users);
@@ -487,25 +547,10 @@ SyncStats perform_sync(const Config& cfg) {
     return stats;
 }
 
-void write_telemetry(const Config& cfg, const SyncStats& stats, uint64_t sync_count) {
-    const int rss_kb = read_self_rss_kb();
-    std::string out;
-    out.reserve(320);
-    out += "daemon_mode=native-epoll\n";
-    out += "daemon_pid=" + std::to_string(::getpid()) + "\n";
-    out += "daemon_rss_kb=" + std::to_string(rss_kb) + "\n";
-    out += "gms_latin_mounted=" + std::to_string(stats.gms_latin_mounted) + "\n";
-    out += "gms_emoji_mounted=" + std::to_string(stats.gms_emoji_mounted) + "\n";
-    out += "sync_count=" + std::to_string(sync_count) + "\n";
-    out += "last_sync_latency_us=" + std::to_string(stats.latency_us) + "\n";
-    out += "active_text_tracking_upm=" + std::to_string(kTextTrackingUpm) + "\n";
-    out += "active_display_tracking_upm=" + std::to_string(kDisplayTrackingUpm) + "\n";
-    (void)write_file_atomic(cfg.rundir + "/telemetry.prop", out, 0644);
-}
-
 class WatchManager {
 public:
-    explicit WatchManager(int inotify_fd) : ifd_(inotify_fd) {}
+    WatchManager(int inotify_fd, const std::string& target_ot_dir)
+        : ifd_(inotify_fd), target_ot_(target_ot_dir) {}
 
     void ensure_watch(const std::string& path, uint32_t mask) {
         if (!dir_exists(path)) return;
@@ -517,16 +562,28 @@ public:
         }
     }
 
-    void remove_wd(int wd) {
+    // Erase wd mapping ONLY on IN_IGNORED to prevent wd reuse race conditions
+    bool handle_ignored(int wd) {
         auto it = wd_to_path_.find(wd);
-        if (it != wd_to_path_.end()) {
-            path_to_wd_.erase(it->second);
-            wd_to_path_.erase(it);
+        if (it == wd_to_path_.end()) return false;
+        const std::string old_path = it->second;
+        path_to_wd_.erase(old_path);
+        wd_to_path_.erase(it);
+        if (old_path == target_ot_) {
+            watch_healthy_ = false;
+            needs_recovery_count_ = true;
+            return true;
         }
-        ::inotify_rm_watch(ifd_, wd);
+        return false;
     }
 
-    void arm_hierarchy(const Config& cfg) {
+    void mark_target_lost() {
+        watch_healthy_ = false;
+        needs_recovery_count_ = true;
+    }
+
+    // Returns true if GMS opentype watch is healthy; increments watch_recoveries_ on recovery
+    bool arm_hierarchy(const Config& cfg) {
         constexpr uint32_t kDirMask =
             IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_DELETE_SELF | IN_MOVE_SELF;
         if (ends_with(cfg.gms_files_root, "/files")) {
@@ -535,7 +592,7 @@ public:
         }
         ensure_watch(cfg.gms_files_root, kDirMask);
         ensure_watch(cfg.gms_files_root + "/fonts", kDirMask);
-        ensure_watch(cfg.gms_files_root + "/fonts/opentype", kDirMask);
+        ensure_watch(target_ot_, kDirMask);
         ensure_watch(cfg.data_fonts_root, kDirMask);
         if (dir_exists(cfg.data_fonts_root)) {
             std::vector<std::string> subdirs;
@@ -545,6 +602,20 @@ public:
             }
         }
         ensure_watch(cfg.moddir, IN_CREATE | IN_MOVED_TO | IN_DELETE_SELF);
+
+        const bool ot_watched = (path_to_wd_.find(target_ot_) != path_to_wd_.end()) && dir_exists(target_ot_);
+        if (ot_watched) {
+            if (!watch_healthy_ && needs_recovery_count_) {
+                ++watch_recoveries_;
+                needs_recovery_count_ = false;
+            }
+            watch_healthy_ = true;
+            recovery_step_ = 0;
+        } else {
+            watch_healthy_ = false;
+            needs_recovery_count_ = true;
+        }
+        return watch_healthy_;
     }
 
     std::string path_for_wd(int wd) const {
@@ -552,16 +623,53 @@ public:
         return it != wd_to_path_.end() ? it->second : std::string{};
     }
 
+    bool healthy() const { return watch_healthy_; }
+    uint64_t recoveries() const { return watch_recoveries_; }
+
+    int next_recovery_backoff_ms() {
+        const int idx = (recovery_step_ < kRecoveryStepCount) ? recovery_step_ : (kRecoveryStepCount - 1);
+        if (recovery_step_ + 1 < kRecoveryStepCount) {
+            ++recovery_step_;
+        }
+        return kRecoveryBackoffMs[idx];
+    }
+
 private:
     int ifd_;
+    std::string target_ot_;
+    bool watch_healthy_ = false;
+    bool needs_recovery_count_ = false;
+    uint64_t watch_recoveries_ = 0;
+    int recovery_step_ = 0;
     std::unordered_map<int, std::string> wd_to_path_;
     std::unordered_map<std::string, int> path_to_wd_;
 };
 
-void arm_debounce_timer(int tfd, int ms) {
+void write_telemetry(const Config& cfg, const SyncStats& stats, uint64_t sync_count,
+                     bool watch_healthy, uint64_t watch_recoveries) {
+    const int rss_kb = read_self_rss_kb();
+    std::string out;
+    out.reserve(384);
+    out += "daemon_mode=native-epoll\n";
+    out += "daemon_pid=" + std::to_string(::getpid()) + "\n";
+    out += "daemon_rss_kb=" + std::to_string(rss_kb) + "\n";
+    out += "watch_health=" + std::string(watch_healthy ? "healthy" : "recovering") + "\n";
+    out += "watch_recoveries=" + std::to_string(watch_recoveries) + "\n";
+    out += "gms_latin_mounted=" + std::to_string(stats.gms_latin_mounted) + "\n";
+    out += "gms_emoji_mounted=" + std::to_string(stats.gms_emoji_mounted) + "\n";
+    out += "sync_count=" + std::to_string(sync_count) + "\n";
+    out += "last_sync_latency_us=" + std::to_string(stats.latency_us) + "\n";
+    out += "active_text_tracking_upm=" + std::to_string(kTextTrackingUpm) + "\n";
+    out += "active_display_tracking_upm=" + std::to_string(kDisplayTrackingUpm) + "\n";
+    (void)write_file_atomic(cfg.rundir + "/telemetry.prop", out, 0644);
+}
+
+void set_oneshot_timer(int tfd, int ms) {
     struct itimerspec its {};
-    its.it_value.tv_sec = ms / 1000;
-    its.it_value.tv_nsec = static_cast<long>(ms % 1000) * 1000000L;
+    if (ms > 0) {
+        its.it_value.tv_sec = ms / 1000;
+        its.it_value.tv_nsec = static_cast<long>(ms % 1000) * 1000000L;
+    }
     its.it_interval.tv_sec = 0;
     its.it_interval.tv_nsec = 0;
     (void)::timerfd_settime(tfd, 0, &its, nullptr);
@@ -635,7 +743,8 @@ int main(int argc, char** argv) {
 
     if (cfg.oneshot) {
         SyncStats st = perform_sync(cfg);
-        write_telemetry(cfg, st, 1);
+        const bool ot_ok = dir_exists(cfg.gms_files_root + "/fonts/opentype");
+        write_telemetry(cfg, st, 1, ot_ok, 0);
         ::flock(lock_fd, LOCK_UN);
         ::close(lock_fd);
         return 0;
@@ -652,13 +761,15 @@ int main(int argc, char** argv) {
 
     int sfd = ::signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
     int ifd = ::inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
-    int tfd = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+    int tfd_debounce = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+    int tfd_recovery = ::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
     int epfd = ::epoll_create1(EPOLL_CLOEXEC);
 
-    if (sfd < 0 || ifd < 0 || tfd < 0 || epfd < 0) {
+    if (sfd < 0 || ifd < 0 || tfd_debounce < 0 || tfd_recovery < 0 || epfd < 0) {
         if (sfd >= 0) ::close(sfd);
         if (ifd >= 0) ::close(ifd);
-        if (tfd >= 0) ::close(tfd);
+        if (tfd_debounce >= 0) ::close(tfd_debounce);
+        if (tfd_recovery >= 0) ::close(tfd_recovery);
         if (epfd >= 0) ::close(epfd);
         cleanup_rundir(cfg, lock_fd);
         return 1;
@@ -668,14 +779,14 @@ int main(int argc, char** argv) {
     if (!cfg.skip_fbe_wait) {
         for (int wait_i = 0; wait_i < 90 && !dir_exists("/sdcard/Android"); ++wait_i) {
             if (module_disabled_or_removed(cfg)) {
-                ::close(epfd); ::close(tfd); ::close(ifd); ::close(sfd);
+                ::close(epfd); ::close(tfd_recovery); ::close(tfd_debounce); ::close(ifd); ::close(sfd);
                 cleanup_rundir(cfg, lock_fd);
                 return 0;
             }
             struct signalfd_siginfo si {};
             if (::read(sfd, &si, sizeof(si)) == static_cast<ssize_t>(sizeof(si))) {
                 if (si.ssi_signo == SIGTERM || si.ssi_signo == SIGINT) {
-                    ::close(epfd); ::close(tfd); ::close(ifd); ::close(sfd);
+                    ::close(epfd); ::close(tfd_recovery); ::close(tfd_debounce); ::close(ifd); ::close(sfd);
                     cleanup_rundir(cfg, lock_fd);
                     return 0;
                 }
@@ -684,12 +795,15 @@ int main(int argc, char** argv) {
         }
     }
 
-    WatchManager watcher(ifd);
-    watcher.arm_hierarchy(cfg);
+    const std::string target_ot = cfg.gms_files_root + "/fonts/opentype";
+    WatchManager watcher(ifd, target_ot);
+    if (!watcher.arm_hierarchy(cfg)) {
+        set_oneshot_timer(tfd_recovery, watcher.next_recovery_backoff_ms());
+    }
 
     uint64_t sync_count = 1;
-    SyncStats init_stats = perform_sync(cfg);
-    write_telemetry(cfg, init_stats, sync_count);
+    SyncStats last_stats = perform_sync(cfg);
+    write_telemetry(cfg, last_stats, sync_count, watcher.healthy(), watcher.recoveries());
 
     auto add_epoll = [epfd](int fd) {
         struct epoll_event ev {};
@@ -698,8 +812,8 @@ int main(int argc, char** argv) {
         return ::epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev) == 0;
     };
 
-    if (!add_epoll(sfd) || !add_epoll(ifd) || !add_epoll(tfd)) {
-        ::close(epfd); ::close(tfd); ::close(ifd); ::close(sfd);
+    if (!add_epoll(sfd) || !add_epoll(ifd) || !add_epoll(tfd_debounce) || !add_epoll(tfd_recovery)) {
+        ::close(epfd); ::close(tfd_recovery); ::close(tfd_debounce); ::close(ifd); ::close(sfd);
         cleanup_rundir(cfg, lock_fd);
         return 1;
     }
@@ -730,16 +844,20 @@ int main(int argc, char** argv) {
                             running = false;
                             break;
                         }
-                        watcher.arm_hierarchy(cfg);
-                        SyncStats st = perform_sync(cfg);
+                        if (watcher.arm_hierarchy(cfg)) {
+                            set_oneshot_timer(tfd_recovery, 0);
+                        } else {
+                            set_oneshot_timer(tfd_recovery, watcher.next_recovery_backoff_ms());
+                        }
+                        last_stats = perform_sync(cfg);
                         ++sync_count;
-                        write_telemetry(cfg, st, sync_count);
+                        write_telemetry(cfg, last_stats, sync_count, watcher.healthy(), watcher.recoveries());
                     }
                 }
             } else if (fd == ifd) {
                 alignas(struct inotify_event) char buf[4096];
-                bool schedule_sync = false;
-                bool rearm = false;
+                bool schedule_debounce = false;
+                bool needs_rearm = false;
                 for (;;) {
                     ssize_t len = ::read(ifd, buf, sizeof(buf));
                     if (len <= 0) break;
@@ -749,38 +867,56 @@ int main(int argc, char** argv) {
                         const std::string wpath = watcher.path_for_wd(ev->wd);
                         std::string_view ename = (ev->len > 0) ? std::string_view(ev->name) : std::string_view{};
 
-                        if (wpath == cfg.moddir) {
+                        if (ev->mask & IN_IGNORED) {
+                            // Erase wd mapping strictly on IN_IGNORED (prevents double-remove / wd reuse race)
+                            if (watcher.handle_ignored(ev->wd)) {
+                                needs_rearm = true;
+                            } else if (wpath != cfg.moddir) {
+                                needs_rearm = true;
+                            }
+                        } else if (wpath == cfg.moddir) {
                             if (ename == "disable" || ename == "remove" || (ev->mask & IN_DELETE_SELF)) {
                                 running = false;
                             }
                         } else {
-                            if (ev->mask & (IN_DELETE_SELF | IN_MOVE_SELF | IN_IGNORED)) {
-                                watcher.remove_wd(ev->wd);
-                                rearm = true;
-                                schedule_sync = true;
+                            if (ev->mask & (IN_DELETE_SELF | IN_MOVE_SELF)) {
+                                if (wpath == target_ot) {
+                                    watcher.mark_target_lost();
+                                }
+                                needs_rearm = true;
                             } else if (ev->mask & IN_CREATE) {
-                                if ((ev->mask & IN_ISDIR) || ename == "fonts" || ename == "opentype") {
-                                    rearm = true;
-                                    schedule_sync = true;
+                                if ((ev->mask & IN_ISDIR) || ename == "files" ||
+                                    ename == "fonts" || ename == "opentype") {
+                                    needs_rearm = true;
+                                    schedule_debounce = true;
                                 }
                             } else if (ev->mask & (IN_CLOSE_WRITE | IN_MOVED_TO)) {
                                 if (ends_with(ename, ".ttf")) {
-                                    schedule_sync = true;
+                                    schedule_debounce = true;
                                 }
                             }
                         }
                         off += static_cast<ssize_t>(sizeof(struct inotify_event) + ev->len);
                     }
                 }
-                if (rearm) {
-                    watcher.arm_hierarchy(cfg);
+                if (running && needs_rearm) {
+                    const bool was_healthy = watcher.healthy();
+                    if (watcher.arm_hierarchy(cfg)) {
+                        set_oneshot_timer(tfd_recovery, 0);
+                        if (!was_healthy) {
+                            schedule_debounce = true;
+                        }
+                    } else {
+                        set_oneshot_timer(tfd_recovery, watcher.next_recovery_backoff_ms());
+                        write_telemetry(cfg, last_stats, sync_count, false, watcher.recoveries());
+                    }
                 }
-                if (running && schedule_sync) {
-                    arm_debounce_timer(tfd, kDebounceMs);
+                if (running && schedule_debounce) {
+                    set_oneshot_timer(tfd_debounce, kDebounceMs);
                 }
-            } else if (fd == tfd) {
+            } else if (fd == tfd_debounce) {
                 uint64_t exp = 0;
-                ssize_t rn = ::read(tfd, &exp, sizeof(exp));
+                ssize_t rn = ::read(tfd_debounce, &exp, sizeof(exp));
                 if (rn != static_cast<ssize_t>(sizeof(exp))) {
                     continue;
                 }
@@ -788,16 +924,40 @@ int main(int argc, char** argv) {
                     running = false;
                     break;
                 }
-                watcher.arm_hierarchy(cfg);
-                SyncStats st = perform_sync(cfg);
+                if (watcher.arm_hierarchy(cfg)) {
+                    set_oneshot_timer(tfd_recovery, 0);
+                } else {
+                    set_oneshot_timer(tfd_recovery, watcher.next_recovery_backoff_ms());
+                }
+                last_stats = perform_sync(cfg);
                 ++sync_count;
-                write_telemetry(cfg, st, sync_count);
+                write_telemetry(cfg, last_stats, sync_count, watcher.healthy(), watcher.recoveries());
+            } else if (fd == tfd_recovery) {
+                uint64_t exp = 0;
+                ssize_t rn = ::read(tfd_recovery, &exp, sizeof(exp));
+                if (rn != static_cast<ssize_t>(sizeof(exp))) {
+                    continue;
+                }
+                if (module_disabled_or_removed(cfg)) {
+                    running = false;
+                    break;
+                }
+                if (watcher.arm_hierarchy(cfg)) {
+                    set_oneshot_timer(tfd_recovery, 0);
+                    last_stats = perform_sync(cfg);
+                    ++sync_count;
+                    write_telemetry(cfg, last_stats, sync_count, true, watcher.recoveries());
+                } else {
+                    set_oneshot_timer(tfd_recovery, watcher.next_recovery_backoff_ms());
+                    write_telemetry(cfg, last_stats, sync_count, false, watcher.recoveries());
+                }
             }
         }
     }
 
     ::close(epfd);
-    ::close(tfd);
+    ::close(tfd_recovery);
+    ::close(tfd_debounce);
     ::close(ifd);
     ::close(sfd);
     cleanup_rundir(cfg, lock_fd);

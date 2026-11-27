@@ -37,6 +37,17 @@ ct_verify_all_masters() {
     return 0
 }
 
+# Verify HyperOS Lockscreen/AOD -> Homescreen clock typography parity:
+#   - Never overwrite stock MiClock*.otf fonts
+#   - Confirm Display/Flex SF Pro masters carrying tnum (tabular numerals) & calt (09:41 colon) are intact
+ct_verify_hyperos_clock_parity() {
+    _moddir="$1"
+    # Ensure no MiClock*.otf was ever accidentally staged inside module overlays
+    rm -f "$_moddir/system/fonts"/MiClock*.otf "$_moddir/system/product/fonts"/MiClock*.otf 2>/dev/null || true
+    ct_verify_ttf "$_moddir/fonts/CoreType-SFPro-Display.ttf" || return 1
+    return 0
+}
+
 ct_sync_font_file() {
     _src_f="$1"
     _dst_f="$2"

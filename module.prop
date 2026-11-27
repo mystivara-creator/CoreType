@@ -3,4 +3,4 @@ name=CoreType
 version=v1.2.0
 versionCode=120
 author=Mystivara
-description=Native Apple CoreText-Parity SF Pro engine (continuous opsz 12–36, Dynamic Weight Curve, C++20 epoll GMS watcher, & Apple iOS 26.4 Emoji) for HyperOS 1–4 & Android 12–16. Zero LSPosed.
+description=Native Apple CoreText-Parity SF Pro engine (continuous opsz, Dynamic Weight Curve, C++20 epoll GMS watcher, & Apple iOS 26.4 Emoji) for HyperOS 1–4 & Android 12–17 (ARM64). Zero LSPosed.

@@ -126,6 +126,8 @@ ct_write_state() {
 ct_write_fallback_telemetry() {
     _sc="$1"
     _rss=$(awk '/^VmRSS:/{print $2;exit}' /proc/self/status 2>/dev/null || echo 0)
+    _wh="recovering"
+    [ -d /data/data/com.google.android.gms/files/fonts/opentype ] && _wh="healthy"
     mkdir -p "$CT_RUN_DIR" 2>/dev/null || true
     chmod 0755 "$CT_RUN_DIR" 2>/dev/null || true
     _tfile="$CT_RUN_DIR/telemetry.prop"
@@ -133,6 +135,8 @@ ct_write_fallback_telemetry() {
         printf 'daemon_mode=shell-fallback\n'
         printf 'daemon_pid=%s\n' "$$"
         printf 'daemon_rss_kb=%s\n' "${_rss:-0}"
+        printf 'watch_health=%s\n' "$_wh"
+        printf 'watch_recoveries=0\n'
         printf 'gms_latin_mounted=%s\n' "${CT_GMS_FONTS_BOUND:-0}"
         printf 'gms_emoji_mounted=%s\n' "${CT_GMS_EMOJI_BOUND:-0}"
         printf 'sync_count=%s\n' "$_sc"
@@ -190,11 +194,29 @@ printf '%s\n' "$$" > "$CT_RUN_DIR/watchd.pid" 2>/dev/null || true
 ct_run_gms_sync() {
     CT_GMS_FONTS_BOUND=0
     CT_GMS_EMOJI_BOUND=0
-    if [ "$_want_gms_fonts" = "1" ]; then
+    _live_gms=$(ct_conf_get "gms_fonts_enabled" "$_want_gms_fonts")
+    _live_emo=$(ct_conf_get "emoji_enabled" "$_want_emoji")
+
+    if [ "$_live_gms" = "1" ]; then
         ct_bind_gms_latin_fonts "$MODDIR"
+    else
+        for _um in /data/data/com.google.android.gms/files/fonts/opentype/*.ttf; do
+            [ -f "$_um" ] || continue
+            ct_gms_is_latin_ui_font "${_um##*/}" || continue
+            if grep -Fq " $_um " /proc/mounts 2>/dev/null; then
+                umount -l "$_um" 2>/dev/null || true
+            fi
+        done
     fi
-    if [ "$_emoji_avail" = "1" ] && [ "$_want_emoji" = "1" ]; then
+    if [ "$_emoji_avail" = "1" ] && [ "$_live_emo" = "1" ]; then
         ct_bind_gms_emoji_cache "$MODDIR" "/data/fonts/files"
+    else
+        for _ue in /data/fonts/files/*/NotoColorEmoji.ttf /data/data/com.google.android.gms/files/fonts/opentype/*[Ee]moji*.ttf; do
+            [ -f "$_ue" ] || continue
+            if grep -Fq " $_ue " /proc/mounts 2>/dev/null; then
+                umount -l "$_ue" 2>/dev/null || true
+            fi
+        done
     fi
 }
 

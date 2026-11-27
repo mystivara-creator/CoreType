@@ -102,6 +102,13 @@
     document.getElementById("tm-rss").textContent = rss > 0 ? `${rss} KB` : "—";
     document.getElementById("tm-pid").textContent = tm.daemon_pid ? `PID ${tm.daemon_pid}` : "Idle";
 
+    const health = tm.watch_health || (mode === "native-epoll" ? "healthy" : "idle");
+    const rec = parseInt(tm.watch_recoveries || "0", 10);
+    document.getElementById("tm-health").textContent =
+      health === "healthy" ? "Healthy" : health === "recovering" ? "Recovering" : "Idle";
+    document.getElementById("tm-recoveries").textContent =
+      `${rec} recover${rec === 1 ? "y" : "ies"}`;
+
     const latinCnt = parseInt(tm.gms_latin_mounted || st.gms_fonts_bound || "0", 10);
     const emojiCnt = parseInt(tm.gms_emoji_mounted || st.gms_emoji_bound || "0", 10);
     document.getElementById("tm-mounts").textContent = `${latinCnt + emojiCnt} active`;
@@ -113,7 +120,7 @@
 
     const tUpm = tm.active_text_tracking_upm || "-46";
     const dUpm = tm.active_display_tracking_upm || "-26";
-    document.getElementById("tm-trak").textContent = `${tUpm} / ${dUpm}`;
+    document.getElementById("tm-trak").textContent = `${tUpm} / ${dUpm} UPM`;
   }
 
   function updateLiveSpecimen() {
@@ -353,6 +360,23 @@
     btn.disabled = false;
   }
 
+  async function exportDiag() {
+    const btn = document.getElementById("export-diag-btn");
+    const desc = document.getElementById("diag-desc");
+    btn.disabled = true;
+    btn.textContent = "Exporting…";
+    const res = await execShell("sh /data/adb/modules/coretype/action.sh --diag 2>&1");
+    if (res.code === 0) {
+      desc.textContent = (res.out || "Diagnostic exported to /sdcard/Download/coretype-diag.txt").trim();
+    } else if (res.code === -1) {
+      desc.textContent = "Preview mode: exports to /sdcard/Download/coretype-diag.txt inside KernelSU / APatch.";
+    } else {
+      desc.textContent = "Diagnostic export failed (check storage permissions).";
+    }
+    btn.textContent = "Export Diagnostic";
+    btn.disabled = false;
+  }
+
   document.querySelectorAll(".profile-item").forEach((btn) => {
     btn.addEventListener("click", () => setProfile(btn.dataset.profile));
   });
@@ -381,6 +405,7 @@
   });
 
   document.getElementById("sync-gms-btn").addEventListener("click", syncGmsNow);
+  document.getElementById("export-diag-btn").addEventListener("click", exportDiag);
 
   loadState();
 })();

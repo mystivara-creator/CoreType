@@ -26,7 +26,7 @@
       <p class="specimen-body" id="specimen-body">
         Headers &amp; clocks render with <strong>SF Pro Display</strong> (opsz 28, Apple Display tracking)
         while paragraphs &amp; chats render with <em>SF Pro Text</em> (opsz 17, Apple Text tracking) —
-        zero layout bloat on HyperOS 1–4 &amp; Android 12–16.
+        zero layout bloat on HyperOS 1–4 &amp; Android 12–17.
       </p>
       <div class="specimen-emoji">✨ 🔥 🥹 🫶🏻 🎧 🇮🇩</div>
       <div class="specimen-meta">
@@ -101,9 +101,19 @@
       <div class="toggle-row">
         <div class="toggle-info">
           <div class="profile-title">Instant GMS Cache Sync</div>
-          <p class="profile-desc" id="sync-gms-desc">Event-driven via epoll + inotify (0% idle CPU, 0 wakelock). Tap to signal SIGUSR1 (&lt; 5 ms).</p>
+          <p class="profile-desc" id="sync-gms-desc">Event-driven via epoll + inotify (0% idle CPU, 0 wakelock). Tap to signal SIGUSR1 (&lt; 5 ms, live mount/umount2).</p>
         </div>
         <button id="sync-gms-btn" class="action-btn" type="button">Sync Now</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <div class="profile-title">One-Tap Diagnostic Bundle</div>
+          <p class="profile-desc" id="diag-desc">Exports read-only telemetry, mount anti-duplication &amp; XML audit to /sdcard/Download/coretype-diag.txt.</p>
+        </div>
+        <button id="export-diag-btn" class="action-btn" type="button">Export Diagnostic</button>
       </div>
     </section>
 
@@ -150,6 +160,11 @@
           <div class="metric-sub" id="tm-pid">PID —</div>
         </div>
         <div class="metric-tile">
+          <div class="metric-label">Watch Health</div>
+          <div class="metric-value" id="tm-health">—</div>
+          <div class="metric-sub" id="tm-recoveries">0 recoveries</div>
+        </div>
+        <div class="metric-tile">
           <div class="metric-label">GMS Mounts</div>
           <div class="metric-value" id="tm-mounts">—</div>
           <div class="metric-sub" id="tm-mounts-sub">Latin · Emoji</div>
@@ -159,16 +174,15 @@
           <div class="metric-value" id="tm-latency">—</div>
           <div class="metric-sub" id="tm-syncs">0 syncs</div>
         </div>
-        <div class="metric-tile">
-          <div class="metric-label">GPOS Tracking</div>
-          <div class="metric-value" id="tm-trak">−46 / −26</div>
-          <div class="metric-sub">Text · Display UPM</div>
-        </div>
       </div>
 
       <div class="divider"></div>
 
       <dl class="kv-grid">
+        <div class="kv-row">
+          <dt>GPOS Tracking (Text / Display)</dt>
+          <dd id="tm-trak">−46 / −26 UPM</dd>
+        </div>
         <div class="kv-row">
           <dt>Active Profile</dt>
           <dd id="kv-profile">—</dd>
@@ -205,7 +219,7 @@
     </section>
 
     <footer class="footer">
-      CoreType v1.2.0 · CoreText-Parity Engine · Mystivara Ecosystem
+      CoreType v1.2.0 · HyperOS 1–4 (Android 12–17) · Mystivara Ecosystem
     </footer>
   </main>
 
