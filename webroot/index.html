@@ -60,7 +60,7 @@
 
       <div class="control-block">
         <div class="profile-title">Header Contrast</div>
-        <p class="profile-desc">Controls visual separation between body text (400) and section headers (600–800).</p>
+        <p class="profile-desc">Controls visual separation between body text (400) and section headers (600–800). Applies in HyperOS <strong>Default</strong> mode (while <strong>MiSans</strong> uses HyperOS's live slider).</p>
         <div class="segmented" id="contrast-group" role="radiogroup" aria-label="Header Contrast">
           <button class="seg-btn" data-contrast="soft" type="button">Soft</button>
           <button class="seg-btn selected" data-contrast="balanced" type="button">Balanced</button>
@@ -94,6 +94,16 @@
           <input type="checkbox" id="emoji-toggle" />
           <span class="slider"></span>
         </label>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <div class="profile-title">Instant GMS Cache Sync</div>
+          <p class="profile-desc" id="sync-gms-desc">Auto-watched every 60s (0 wakelock). Tap to re-bind newly downloaded Google fonts without reboot.</p>
+        </div>
+        <button id="sync-gms-btn" class="action-btn" type="button">Sync Now</button>
       </div>
     </section>
 

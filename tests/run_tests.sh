@@ -386,6 +386,7 @@ if command -v shellcheck >/dev/null 2>&1; then
         "$REPO_ROOT/customize.sh" \
         "$REPO_ROOT/post-fs-data.sh" \
         "$REPO_ROOT/service.sh" \
+        "$REPO_ROOT/action.sh" \
         "$REPO_ROOT/uninstall.sh" \
         "$REPO_ROOT/lib/common.sh" \
         "$REPO_ROOT/lib/profiles.sh" \

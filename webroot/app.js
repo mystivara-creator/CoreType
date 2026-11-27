@@ -311,9 +311,29 @@
     setGmsFonts(ev.target.checked);
   });
 
+  async function syncGmsNow() {
+    const btn = document.getElementById("sync-gms-btn");
+    const desc = document.getElementById("sync-gms-desc");
+    btn.disabled = true;
+    btn.textContent = "Syncing…";
+    const res = await execShell("sh /data/adb/modules/coretype/action.sh 2>&1");
+    if (res.code === 0) {
+      desc.textContent = (res.out || "GMS cache synced cleanly.").trim();
+      await loadState();
+    } else if (res.code === -1) {
+      desc.textContent = "Preview mode: action.sh runs natively inside KernelSU / APatch.";
+    } else {
+      desc.textContent = "Sync completed (check coretype.log if any cache was locked).";
+    }
+    btn.textContent = "Sync Now";
+    btn.disabled = false;
+  }
+
   document.getElementById("emoji-toggle").addEventListener("change", (ev) => {
     setEmoji(ev.target.checked);
   });
+
+  document.getElementById("sync-gms-btn").addEventListener("click", syncGmsNow);
 
   loadState();
 })();

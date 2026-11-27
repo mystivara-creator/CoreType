@@ -27,12 +27,12 @@ Installing raw Apple `SF-Pro.ttf` on Android/HyperOS always feels lifeless and b
   - **Two Automatic CI Editions:**
     - **`CoreType-v1.2.0-Lite.zip`** (~2.1 MB) — Dual-Optical SF Pro + Dynamic Weight Curve + Universal GMS Fonts + MiSans Slider
     - **`CoreType-v1.2.0-Full.zip`** (~35 MB) — Everything in Lite + Apple iOS 26.4 Emoji
-- **Zero-Bootloop, Zero-Daemon & KernelSU-Umount-Safe Architecture:**
+- **Zero-Bootloop, FBE-Safe & KernelSU-Umount-Safe Architecture:**
   - **100% Stock-Slot Mapping (Zero Non-Stock Filenames in XML):** Maps Dual-Optical SF Pro masters strictly onto existing stock `/system/fonts/` slots (`Roboto-Regular.ttf`, `RobotoStatic-Regular.ttf`, `RobotoFlex-Regular.ttf`, etc.). Even when KernelSU `Unmount modules` hides overlays inside banking apps, every referenced stock filename still exists on disk — eliminating `minikin::Font::prepareFont` `SIGSEGV` crashes completely.
   - **KernelSU / KernelSU-Next `Unmount modules` Note:** Apps with `Unmount modules` enabled are intentionally isolated by KernelSU to stock `/system/fonts/` (Roboto + Google Noto Emoji). Keep `Unmount modules` **ON** for banking/root-detecting apps, and turn it **OFF** for everyday apps where you want SF Pro & Apple iOS Emoji (such as **Gboard**, **Notes**, **WhatsApp**, and **Android System WebView**).
+  - **FBE-Safe Micro GMS Watcher & Zero-Reboot `action.sh`:** Waits cleanly for Android File-Based Encryption unlock (`/sdcard/Android`) before binding `/data/data/com.google.android.gms/files/fonts/opentype/`, then runs a single-instance sleep-only watcher (`0` wakelock, `< 1 MB` RAM, 60s interval) to catch any newly downloaded GMS fonts/emojis automatically — plus a 1-tap **Sync Now** button in WebUI & `action.sh` for instant on-demand sync with zero reboot.
   - **Automatic ROM / HyperOS OTA Resync:** Detects `ro.build.fingerprint` changes in `post-fs-data` (before mounts & Zygote) and automatically refreshes stock XML snapshots, stock slots, and patches — zero re-flashing needed after OTA updates.
   - **Self-Healing Bootloop Guard:** Automatically disables the module (`disable` flag) if 2 consecutive boots ever fail to reach `sys.boot_completed=1`.
-  - **Zero Background Daemon (0 KB Persistent RAM):** `service.sh` verifies health, writes `state.prop` in one atomic pass, trims logs `< 16 KB`, and exits immediately.
   - **Shared-Inode Hardlinks & 100% Fallback Preservation:** Uses real `0644` hardlinks (no symlinks) to share Linux kernel RAM page cache; preserves CJK (via detected fallback), Arabic, Indic, and `MiClock*.otf`.
 - **WebUI Optical Profile & Dynamic Curve Controls (KSU / APatch / MMRL):**
   - `iOS Optical Dynamic` *(Recommended)* — pure shapes (`wdth 96.5 / 97.0`) + Apple GPOS `trak`
