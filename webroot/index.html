@@ -304,29 +304,42 @@
     </section>
   </main>
 
+  <!-- Optical Liquid Glass Refraction Filter (SVG Displacement Lens for Chromium/Android WebView) -->
+  <svg class="svg-filters" aria-hidden="true" focusable="false">
+    <defs>
+      <filter id="liquid-glass-lens" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">
+        <feTurbulence type="fractalNoise" baseFrequency="0.012 0.028" numOctaves="2" seed="7" result="noise" />
+        <feGaussianBlur in="noise" stdDeviation="2.2" result="softNoise" />
+        <feDisplacementMap in="SourceGraphic" in2="softNoise" scale="14" xChannelSelector="R" yChannelSelector="G" result="refracted" />
+        <feColorMatrix in="refracted" type="saturate" values="1.25" />
+      </filter>
+    </defs>
+  </svg>
+
   <!-- Floating iOS 27 Liquid Glass Pill Toast -->
   <div id="ios-toast" class="ios-toast glass-surface" role="status" aria-live="polite">
     <span class="toast-dot" id="toast-dot"></span>
     <span id="toast-text">Applied live</span>
   </div>
 
-  <!-- Floating iOS 27 Liquid Glass 3-Tab Bottom Dock -->
+  <!-- Floating iOS 27 Liquid Glass 3-Tab Draggable Dock -->
   <nav class="ios-tabbar-wrap" aria-label="Primary Navigation">
-    <div class="ios-tabbar glass-surface" role="tablist">
-      <button class="tab-btn interactive-glow active" data-tab-target="typography" role="tab" aria-selected="true" type="button">
+    <div class="ios-tabbar glass-surface" id="ios-tabbar" role="tablist">
+      <div class="tab-lens" id="tab-lens" aria-hidden="true"></div>
+      <button class="tab-btn interactive-glow active" data-tab-target="typography" data-tab-index="0" role="tab" aria-selected="true" type="button">
         <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M4 19L10 5l6 14" /><path d="M6.3 14h7.4" /><path d="M16.5 19c1.9 0 3.5-1.1 3.5-3.2 0-2-1.4-3-3.2-3-1.4 0-2.5.7-2.8 1.6" />
         </svg>
         <span>Typography</span>
       </button>
-      <button class="tab-btn interactive-glow" data-tab-target="ecosystem" role="tab" aria-selected="false" type="button">
+      <button class="tab-btn interactive-glow" data-tab-target="ecosystem" data-tab-index="1" role="tab" aria-selected="false" type="button">
         <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <rect x="3" y="3" width="7.5" height="7.5" rx="2.2" /><rect x="13.5" y="3" width="7.5" height="7.5" rx="2.2" />
           <rect x="3" y="13.5" width="7.5" height="7.5" rx="2.2" /><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2.2" />
         </svg>
         <span>Ecosystem</span>
       </button>
-      <button class="tab-btn interactive-glow" data-tab-target="engine" role="tab" aria-selected="false" type="button">
+      <button class="tab-btn interactive-glow" data-tab-target="engine" data-tab-index="2" role="tab" aria-selected="false" type="button">
         <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M4 14a8 8 0 1 1 16 0" /><path d="M12 14l4-4" /><circle cx="12" cy="14" r="1.6" fill="currentColor" stroke="none" />
         </svg>

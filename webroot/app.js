@@ -98,8 +98,24 @@
     toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
   }
 
+  const TAB_ORDER = ["typography", "ecosystem", "engine"];
+  let currentTabIndex = 0;
+
+  function positionTabLens(index, dragOffsetPx, isDragging) {
+    const lens = document.getElementById("tab-lens");
+    if (!lens) return;
+    lens.classList.toggle("dragging", Boolean(isDragging));
+    const basePct = index * 100;
+    if (isDragging && typeof dragOffsetPx === "number") {
+      lens.style.transform = `translate3d(calc(${basePct}% + ${dragOffsetPx.toFixed(1)}px), 0, 0) scale(1.07, 1.04)`;
+    } else {
+      lens.style.transform = `translate3d(${basePct}%, 0, 0)`;
+    }
+  }
+
   function switchTab(tabId) {
     if (!TAB_TITLES[tabId]) tabId = "typography";
+    currentTabIndex = Math.max(0, TAB_ORDER.indexOf(tabId));
     document.querySelectorAll(".tab-panel").forEach((p) => {
       p.classList.toggle("active", p.dataset.tab === tabId);
     });
@@ -108,11 +124,110 @@
       b.classList.toggle("active", active);
       b.setAttribute("aria-selected", active ? "true" : "false");
     });
+    positionTabLens(currentTabIndex, 0, false);
     const navTitle = document.getElementById("nav-title");
     if (navTitle) navTitle.textContent = TAB_TITLES[tabId];
     try {
       sessionStorage.setItem("ct_active_tab", tabId);
     } catch (_) {}
+  }
+
+  function setupTabSliding() {
+    const dock = document.getElementById("ios-tabbar");
+    if (dock) {
+      let dragging = false;
+      let startX = 0;
+      let startIdx = 0;
+      let moved = false;
+
+      dock.addEventListener("pointerdown", (e) => {
+        dragging = true;
+        moved = false;
+        startX = e.clientX;
+        startIdx = currentTabIndex;
+        try {
+          dock.setPointerCapture(e.pointerId);
+        } catch (_) {}
+      });
+
+      dock.addEventListener("pointermove", (e) => {
+        if (!dragging) return;
+        const rect = dock.getBoundingClientRect();
+        const slotW = Math.max(1, (rect.width - 10) / 3);
+        const dx = e.clientX - startX;
+        if (Math.abs(dx) > 6) moved = true;
+        if (!moved) return;
+
+        // Clamp lens travel strictly inside the 3-tab dock
+        const minDx = -startIdx * slotW;
+        const maxDx = (2 - startIdx) * slotW;
+        const clampedDx = Math.max(minDx, Math.min(maxDx, dx));
+        positionTabLens(startIdx, clampedDx, true);
+
+        const hoverIdx = Math.max(0, Math.min(2, Math.round(startIdx + clampedDx / slotW)));
+        document.querySelectorAll(".tab-btn").forEach((b, i) => {
+          b.classList.toggle("active", i === hoverIdx);
+        });
+      });
+
+      const finishDrag = (e) => {
+        if (!dragging) return;
+        dragging = false;
+        if (!moved) {
+          positionTabLens(currentTabIndex, 0, false);
+          return;
+        }
+        const rect = dock.getBoundingClientRect();
+        const slotW = Math.max(1, (rect.width - 10) / 3);
+        const dx = e.clientX - startX;
+        const nextIdx = Math.max(0, Math.min(2, Math.round(startIdx + dx / slotW)));
+        switchTab(TAB_ORDER[nextIdx]);
+      };
+
+      dock.addEventListener("pointerup", finishDrag);
+      dock.addEventListener("pointercancel", () => {
+        dragging = false;
+        positionTabLens(currentTabIndex, 0, false);
+      });
+    }
+
+    // Horizontal swipe gesture on main content area (ignores range slider drags)
+    const main = document.querySelector(".container");
+    if (main) {
+      let tx = 0;
+      let ty = 0;
+      let tracking = false;
+      main.addEventListener(
+        "touchstart",
+        (e) => {
+          if (e.touches.length !== 1 || e.target.closest('input[type="range"]')) {
+            tracking = false;
+            return;
+          }
+          tx = e.touches[0].clientX;
+          ty = e.touches[0].clientY;
+          tracking = true;
+        },
+        { passive: true }
+      );
+      main.addEventListener(
+        "touchend",
+        (e) => {
+          if (!tracking || !e.changedTouches.length) return;
+          tracking = false;
+          const dx = e.changedTouches[0].clientX - tx;
+          const dy = e.changedTouches[0].clientY - ty;
+          if (Math.abs(dx) > 54 && Math.abs(dx) > Math.abs(dy) * 1.45) {
+            if (dx < 0 && currentTabIndex < 2) {
+              switchTab(TAB_ORDER[currentTabIndex + 1]);
+            } else if (dx > 0 && currentTabIndex > 0) {
+              switchTab(TAB_ORDER[currentTabIndex - 1]);
+            }
+          }
+        },
+        { passive: true }
+      );
+    }
   }
 
   function bindInteractiveGlow() {
@@ -560,6 +675,7 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     bindInteractiveGlow();
+    setupTabSliding();
     setupListeners();
     loadState();
   });
