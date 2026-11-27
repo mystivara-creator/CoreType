@@ -149,9 +149,34 @@ if [ -r "$PID_FILE" ]; then
     fi
 fi
 
-# Direct fallback path (when daemon is idle or shell-fallback is active)
+# On-demand native daemon wake-up (handles Lite + GMS OFF at boot -> user toggles GMS ON live)
 _want_gms_fonts=$(ct_conf_get "gms_fonts_enabled" "1")
 _want_emoji=$(ct_conf_get "emoji_enabled" "1")
+_watchd_bin="$MODDIR/bin/coretype-watchd"
+if { [ "$_want_gms_fonts" = "1" ] || { [ "$_want_emoji" = "1" ] && ct_emoji_master_valid "$MODDIR/fonts/CoreType-AppleEmoji.ttf"; }; } \
+    && [ -x "$_watchd_bin" ] && "$_watchd_bin" --version >/dev/null 2>&1; then
+    "$_watchd_bin" --moddir "$MODDIR" --datadir "$CT_DATA_DIR" --rundir "$CT_RUN_DIR" >/dev/null 2>&1 &
+    _tries=0
+    while [ "$_tries" -lt 20 ]; do
+        [ -s "$TELEM_FILE" ] && break
+        sleep 0.05 2>/dev/null || sleep 1
+        _tries=$((_tries + 1))
+    done
+    if [ -s "$TELEM_FILE" ]; then
+        _lat=$(awk -F= '$1=="last_sync_latency_us"{print $2;exit}' "$TELEM_FILE" 2>/dev/null || echo 0)
+        _gl=$(awk -F= '$1=="gms_latin_mounted"{print $2;exit}' "$TELEM_FILE" 2>/dev/null || echo 0)
+        _ge=$(awk -F= '$1=="gms_emoji_mounted"{print $2;exit}' "$TELEM_FILE" 2>/dev/null || echo 0)
+        _wh=$(awk -F= '$1=="watch_health"{print $2;exit}' "$TELEM_FILE" 2>/dev/null || echo "healthy")
+        ct_state_set "gms_watcher" "native-epoll" 2>/dev/null || true
+        ct_state_set "gms_fonts_bound" "${_gl:-0}" 2>/dev/null || true
+        ct_state_set "gms_emoji_bound" "${_ge:-0}" 2>/dev/null || true
+        printf 'CoreType Native Daemon Started: %s Latin, %s Emoji mounted in %s us (watch=%s).\n' \
+            "${_gl:-0}" "${_ge:-0}" "${_lat:-0}" "${_wh:-healthy}"
+        exit 0
+    fi
+fi
+
+# Direct fallback path (when native ABI binary is unavailable or both toggles are OFF)
 
 CT_GMS_FONTS_BOUND=0
 CT_GMS_EMOJI_BOUND=0
