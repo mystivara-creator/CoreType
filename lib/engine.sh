@@ -40,16 +40,15 @@ ct_sync_font_file() {
     chmod 0644 "$_dst_f" 2>/dev/null || true
 }
 
-# Detect a verified separate CJK fallback font (other than MiSansVF.ttf) across HyperOS 1-4 & AOSP.
-# Ensures zero Chinese/Japanese/Korean tofu boxes when MiSansVF.ttf powers the HyperOS weight slider.
+# Detect a verified separate CJK fallback font accessible in /system/fonts/ (other than MiSansVF.ttf).
+# Requiring presence in /system/fonts/ guarantees font_fallback.xml resolution & KernelSU-umount safety.
 # Sets: CT_CJK_FALLBACK
 ct_resolve_cjk_fallback() {
     _sys_fdir="${1:-/system/fonts}"
-    _prod_fdir="${2:-/product/fonts}"
     CT_CJK_FALLBACK=""
 
     for _cand in MiSansTCVF.ttf MiSansL3.otf NotoSansCJK-Regular.ttc; do
-        if [ -e "$_sys_fdir/$_cand" ] || [ -e "$_prod_fdir/$_cand" ] || [ -e "/system$_prod_fdir/$_cand" ]; then
+        if [ -e "$_sys_fdir/$_cand" ]; then
             CT_CJK_FALLBACK="$_cand"
             return 0
         fi

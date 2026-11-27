@@ -54,7 +54,7 @@ ct_sync_emoji_slots() {
     return 0
 }
 
-# Non-destructive bind-mount over Google Play Services dynamic emoji cache (/data/fonts/files/*/NotoColorEmoji.ttf).
+# Non-destructive, SELinux-safe bind-mount over Google Play Services dynamic emoji cache.
 # Leaves /data/fonts intact on disk; vanishes cleanly on disable/uninstall/reboot.
 # Usage: ct_bind_gms_emoji_cache <moddir> [data_fonts_root]
 ct_bind_gms_emoji_cache() {
@@ -66,10 +66,28 @@ ct_bind_gms_emoji_cache() {
     ct_emoji_master_valid "$_emoji_src" || return 0
     [ -d "$_df_root" ] || return 0
 
+    # Ensure source binary carries SELinux u:object_r:system_file:s0 + 0644 so every
+    # app sandbox (WhatsApp, Telegram, Gboard, Chrome, isolated_app) can mmap it without EACCES.
+    chmod 0644 "$_emoji_src" 2>/dev/null || true
+    if command -v chcon >/dev/null 2>&1; then
+        chcon u:object_r:system_file:s0 "$_emoji_src" 2>/dev/null || true
+    fi
+
+    # Prefer live mounted /system/fonts/NotoColorEmoji.ttf when already mounted & byte-identical
+    _bind_src="$_emoji_src"
+    if [ -r /system/fonts/NotoColorEmoji.ttf ]; then
+        _msz=$(wc -c < "$_emoji_src" 2>/dev/null || echo 0)
+        _lsz=$(wc -c < /system/fonts/NotoColorEmoji.ttf 2>/dev/null || echo 1)
+        if [ "$_msz" = "$_lsz" ]; then
+            _bind_src="/system/fonts/NotoColorEmoji.ttf"
+        fi
+    fi
+
     for _gms_ttf in "$_df_root"/*/NotoColorEmoji.ttf; do
         [ -f "$_gms_ttf" ] || continue
         if ! grep -Fq " $_gms_ttf " /proc/mounts 2>/dev/null; then
-            if mount -o bind "$_emoji_src" "$_gms_ttf" 2>/dev/null; then
+            if mount -o bind "$_bind_src" "$_gms_ttf" 2>/dev/null; then
+                mount -o remount,ro,bind "$_gms_ttf" 2>/dev/null || true
                 CT_GMS_EMOJI_BOUND=$((CT_GMS_EMOJI_BOUND + 1))
             fi
         else

@@ -57,7 +57,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 HOS3_FONTS="$TMP_DIR/hos3_fonts"
 HOS3_PROD="$TMP_DIR/hos3_prod"
 mkdir -p "$HOS3_FONTS" "$HOS3_PROD"
-for _mf in Roboto-Regular.ttf RobotoStatic-Regular.ttf RobotoFlex-Regular.ttf MiSansVF.ttf MiSansVF_Overlay.ttf NotoColorEmoji.ttf NotoColorEmojiFlags.ttf; do
+for _mf in Roboto-Regular.ttf RobotoStatic-Regular.ttf RobotoFlex-Regular.ttf MiSansVF.ttf MiSansVF_Overlay.ttf MiSansTCVF.ttf NotoColorEmoji.ttf NotoColorEmojiFlags.ttf; do
     printf 'mockfont' > "$HOS3_FONTS/$_mf"
 done
 for _pf in MiSansVF.ttf MiSansLatinVF.ttf MiSansTCVF.ttf; do
