@@ -29,6 +29,11 @@ ct_verify_all_masters() {
             return 1
         fi
     done
+    if [ -f "$_src_dir/CoreType-SFPro-Flex.ttf" ] && ! ct_verify_ttf "$_src_dir/CoreType-SFPro-Flex.ttf"; then
+        # shellcheck disable=SC2034
+        CT_FAILED_MASTER="CoreType-SFPro-Flex.ttf"
+        return 1
+    fi
     return 0
 }
 
@@ -77,12 +82,22 @@ ct_sync_stock_slots() {
     if [ "$CT_SLOT_DISP" != "$CT_SLOT_TEXT" ]; then
         ct_sync_font_file "$_src_fonts/CoreType-SFPro-Display.ttf" "$_moddir/system/fonts/$CT_SLOT_DISP"
     fi
-    if [ "$CT_SLOT_ITAL" != "$CT_SLOT_TEXT" ] && [ "$CT_SLOT_ITAL" != "$CT_SLOT_DISP" ]; then
+    if [ "$CT_SLOT_FLEX" != "$CT_SLOT_TEXT" ] && [ "$CT_SLOT_FLEX" != "$CT_SLOT_DISP" ]; then
+        if [ -f "$_src_fonts/CoreType-SFPro-Flex.ttf" ]; then
+            ct_sync_font_file "$_src_fonts/CoreType-SFPro-Flex.ttf" "$_moddir/system/fonts/$CT_SLOT_FLEX"
+        else
+            ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text.ttf" "$_moddir/system/fonts/$CT_SLOT_FLEX"
+        fi
+    fi
+    if [ "$CT_SLOT_ITAL" != "$CT_SLOT_TEXT" ] \
+        && [ "$CT_SLOT_ITAL" != "$CT_SLOT_DISP" ] \
+        && [ "$CT_SLOT_ITAL" != "$CT_SLOT_FLEX" ]; then
         ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text-Italic.ttf" "$_moddir/system/fonts/$CT_SLOT_ITAL"
     fi
     if [ "$CT_SLOT_DITAL" != "$CT_SLOT_ITAL" ] \
         && [ "$CT_SLOT_DITAL" != "$CT_SLOT_TEXT" ] \
-        && [ "$CT_SLOT_DITAL" != "$CT_SLOT_DISP" ]; then
+        && [ "$CT_SLOT_DITAL" != "$CT_SLOT_DISP" ] \
+        && [ "$CT_SLOT_DITAL" != "$CT_SLOT_FLEX" ]; then
         ct_sync_font_file "$_src_fonts/CoreType-SFPro-Display-Italic.ttf" "$_moddir/system/fonts/$CT_SLOT_DITAL"
     fi
 

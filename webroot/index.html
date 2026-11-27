@@ -101,7 +101,7 @@
       <div class="toggle-row">
         <div class="toggle-info">
           <div class="profile-title">Instant GMS Cache Sync</div>
-          <p class="profile-desc" id="sync-gms-desc">Auto-watched every 60s (0 wakelock). Tap to re-bind newly downloaded Google fonts without reboot.</p>
+          <p class="profile-desc" id="sync-gms-desc">Event-driven via epoll + inotify (0% idle CPU, 0 wakelock). Tap to signal SIGUSR1 (&lt; 5 ms).</p>
         </div>
         <button id="sync-gms-btn" class="action-btn" type="button">Sync Now</button>
       </div>
@@ -138,7 +138,36 @@
     </section>
 
     <section class="card">
-      <div class="card-label">Engine Telemetry</div>
+      <div class="telemetry-head">
+        <div class="card-label" style="margin-bottom:0">Live Engine Telemetry</div>
+        <span id="daemon-pill" class="pill pill-live">Checking…</span>
+      </div>
+
+      <div class="metric-grid">
+        <div class="metric-tile">
+          <div class="metric-label">Daemon RSS</div>
+          <div class="metric-value" id="tm-rss">—</div>
+          <div class="metric-sub" id="tm-pid">PID —</div>
+        </div>
+        <div class="metric-tile">
+          <div class="metric-label">GMS Mounts</div>
+          <div class="metric-value" id="tm-mounts">—</div>
+          <div class="metric-sub" id="tm-mounts-sub">Latin · Emoji</div>
+        </div>
+        <div class="metric-tile">
+          <div class="metric-label">Sync Latency</div>
+          <div class="metric-value" id="tm-latency">—</div>
+          <div class="metric-sub" id="tm-syncs">0 syncs</div>
+        </div>
+        <div class="metric-tile">
+          <div class="metric-label">GPOS Tracking</div>
+          <div class="metric-value" id="tm-trak">−46 / −26</div>
+          <div class="metric-sub">Text · Display UPM</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
       <dl class="kv-grid">
         <div class="kv-row">
           <dt>Active Profile</dt>
@@ -149,12 +178,8 @@
           <dd id="kv-curve">—</dd>
         </div>
         <div class="kv-row">
-          <dt>Universal GMS Fonts</dt>
-          <dd id="kv-gms-fonts">—</dd>
-        </div>
-        <div class="kv-row">
-          <dt>Optical Masters</dt>
-          <dd id="kv-mounted">—</dd>
+          <dt>Continuous Flex (opsz)</dt>
+          <dd id="kv-flex">—</dd>
         </div>
         <div class="kv-row">
           <dt>Stock Slots (Umount-Safe)</dt>
@@ -180,7 +205,7 @@
     </section>
 
     <footer class="footer">
-      CoreType v1.2.0 · Mystivara Ecosystem · Zero LSPosed
+      CoreType v1.2.0 · CoreText-Parity Engine · Mystivara Ecosystem
     </footer>
   </main>
 

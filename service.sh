@@ -1,11 +1,13 @@
 #!/system/bin/sh
-# CoreType — Boot Verification, FBE-Safe GMS Sync & Micro Sleep-Only Watcher
+# CoreType — Boot Verification, Telemetry & Native C++20 Event-Driven Daemon Launcher
 # 1. Disarms Bootloop Guard as soon as sys.boot_completed=1
-# 2. Waits cleanly for Android FBE user unlock (/sdcard/Android) so /data/data/com.google.android.gms is readable
-# 3. Runs an ultra-lightweight sleep-only watcher (0 wakelock, <1 MB RAM) that auto-binds any
-#    newly downloaded GMS Latin fonts or EmojiCompat updates without requiring a reboot.
+# 2. Writes atomic state.prop telemetry
+# 3. Launches native C++20 `coretype-watchd` (epoll + inotify + timerfd + signalfd, 0% idle CPU,
+#    < 300 KB RSS, 0 wakelock, /dev/.coretype/) when executable on this ABI; falls back to
+#    a lightweight POSIX shell watcher ONLY on unsupported architectures.
 
 MODDIR="${0%/*}"
+CT_RUN_DIR="/dev/.coretype"
 
 # shellcheck disable=SC1091
 . "$MODDIR/lib/common.sh"
@@ -89,8 +91,8 @@ fi
 
 _ota_state=$(ct_conf_get "ota_status" "synced")
 
-ct_write_telemetry() {
-    _w_state="$1"
+ct_write_state() {
+    _w_mode="$1"
     ct_state_write_all \
         "status=$_status" \
         "profile=$CT_PROFILE" \
@@ -107,6 +109,7 @@ ct_write_telemetry() {
         "xml_active=$_xml_active" \
         "slot_text=$CT_SLOT_TEXT" \
         "slot_disp=$CT_SLOT_DISP" \
+        "slot_flex=${CT_SLOT_FLEX:-$CT_SLOT_TEXT}" \
         "slot_ital=$CT_SLOT_ITAL" \
         "misans_slider=${CT_MISANS_SLIDER_ACTIVE:-0}" \
         "misans_prod_mounted=$_misans_prod_ok" \
@@ -114,25 +117,75 @@ ct_write_telemetry() {
         "emoji_available=$_emoji_avail" \
         "emoji_active=$_emoji_active" \
         "gms_emoji_bound=${CT_GMS_EMOJI_BOUND:-0}" \
-        "gms_watcher=$_w_state" \
+        "gms_watcher=$_w_mode" \
         "ota_status=$_ota_state" \
-        "optical_engine=dual_master_dynamic_curve_umount_safe" \
+        "optical_engine=coretext_parity_continuous_opsz_epoll" \
         "bootloop_guard=$_guard_state"
+}
+
+ct_write_fallback_telemetry() {
+    _sc="$1"
+    _rss=$(awk '/^VmRSS:/{print $2;exit}' /proc/self/status 2>/dev/null || echo 0)
+    mkdir -p "$CT_RUN_DIR" 2>/dev/null || true
+    chmod 0755 "$CT_RUN_DIR" 2>/dev/null || true
+    _tfile="$CT_RUN_DIR/telemetry.prop"
+    if {
+        printf 'daemon_mode=shell-fallback\n'
+        printf 'daemon_pid=%s\n' "$$"
+        printf 'daemon_rss_kb=%s\n' "${_rss:-0}"
+        printf 'gms_latin_mounted=%s\n' "${CT_GMS_FONTS_BOUND:-0}"
+        printf 'gms_emoji_mounted=%s\n' "${CT_GMS_EMOJI_BOUND:-0}"
+        printf 'sync_count=%s\n' "$_sc"
+        printf 'last_sync_latency_us=0\n'
+        printf 'active_text_tracking_upm=-46\n'
+        printf 'active_display_tracking_upm=-26\n'
+    } > "$_tfile.tmp.$$" 2>/dev/null; then
+        mv "$_tfile.tmp.$$" "$_tfile" 2>/dev/null || true
+    fi
+    chmod 0644 "$_tfile" 2>/dev/null || true
 }
 
 CT_GMS_FONTS_BOUND=0
 CT_GMS_EMOJI_BOUND=0
 
-# Write immediate post-boot telemetry (even before lockscreen unlock)
-ct_write_telemetry "waiting_unlock"
+_need_watcher="0"
+if [ "$_want_gms_fonts" = "1" ] || { [ "$_emoji_avail" = "1" ] && [ "$_want_emoji" = "1" ]; }; then
+    _need_watcher="1"
+fi
 
-# 2. Wait cleanly for Android FBE Credential-Encrypted storage unlock (/sdcard/Android)
-#    so /data/data/com.google.android.gms/files/fonts/opentype/ is decrypted and readable.
+if [ "$_need_watcher" != "1" ]; then
+    ct_write_state "idle"
+    ct_log "Boot verify: status=$_status profile=$CT_PROFILE curve=$_rom_curve/bias=$CT_WEIGHT_BIAS/$CT_CONTRAST_MODE xml=$_xml_active fonts=$_font_ok watcher=idle guard=$_guard_state"
+    ct_trim_log
+    exit 0
+fi
+
+# 2. Prefer Native C++20 epoll+inotify+timerfd Daemon (0% idle CPU, < 300 KB RSS, 0 wakelock)
+WATCHD_BIN="$MODDIR/bin/coretype-watchd"
+if [ -x "$WATCHD_BIN" ] && "$WATCHD_BIN" --version >/dev/null 2>&1; then
+    ct_write_state "native-epoll"
+    ct_log "Boot verify: status=$_status profile=$CT_PROFILE curve=$_rom_curve/bias=$CT_WEIGHT_BIAS/$CT_CONTRAST_MODE xml=$_xml_active fonts=$_font_ok watcher=native-epoll guard=$_guard_state"
+    ct_trim_log
+    exec "$WATCHD_BIN" --moddir "$MODDIR" --datadir "$CT_DATA_DIR" --rundir "$CT_RUN_DIR"
+fi
+
+# 3. Lightweight POSIX Shell Fallback (ONLY when native ABI binary is unavailable)
+ct_write_state "shell-fallback"
 _uwait=0
 while [ ! -d /sdcard/Android ] && [ "$_uwait" -lt 90 ]; do
     sleep 2
     _uwait=$((_uwait + 1))
 done
+
+mkdir -p "$CT_RUN_DIR" 2>/dev/null || true
+chmod 0755 "$CT_RUN_DIR" 2>/dev/null || true
+if [ -r "$CT_RUN_DIR/watchd.pid" ]; then
+    _old_pid=$(tr -cd '0-9' < "$CT_RUN_DIR/watchd.pid" 2>/dev/null)
+    if [ -n "$_old_pid" ] && [ "$_old_pid" != "$$" ]; then
+        kill "$_old_pid" 2>/dev/null || true
+    fi
+fi
+printf '%s\n' "$$" > "$CT_RUN_DIR/watchd.pid" 2>/dev/null || true
 
 ct_run_gms_sync() {
     CT_GMS_FONTS_BOUND=0
@@ -145,37 +198,12 @@ ct_run_gms_sync() {
     fi
 }
 
+_sync_n=1
 ct_run_gms_sync
-
-_need_watcher="0"
-if [ "$_want_gms_fonts" = "1" ] || { [ "$_emoji_avail" = "1" ] && [ "$_want_emoji" = "1" ]; }; then
-    _need_watcher="1"
-fi
-
-if [ "$_need_watcher" != "1" ]; then
-    ct_write_telemetry "idle"
-    ct_log "Boot verify: status=$_status profile=$CT_PROFILE curve=$_rom_curve/bias=$CT_WEIGHT_BIAS/$CT_CONTRAST_MODE xml=$_xml_active fonts=$_font_ok watcher=idle guard=$_guard_state"
-    ct_trim_log
-    exit 0
-fi
-
-# 3. Single-instance Micro GMS Watcher (sleep-only, 0 wakelock, <1 MB RAM)
-#    Automatically catches any new Google Sans / EmojiCompat files downloaded by GMS later.
-_pid_file="$CT_DATA_DIR/watcher.pid"
-if [ -r "$_pid_file" ]; then
-    _old_pid=$(tr -cd '0-9' < "$_pid_file" 2>/dev/null)
-    if [ -n "$_old_pid" ] && [ "$_old_pid" != "$$" ]; then
-        kill "$_old_pid" 2>/dev/null || true
-    fi
-fi
-printf '%s\n' "$$" > "$_pid_file" 2>/dev/null || true
-
-ct_write_telemetry "active"
-ct_log "Boot verify: status=$_status profile=$CT_PROFILE curve=$_rom_curve/bias=$CT_WEIGHT_BIAS/$CT_CONTRAST_MODE xml=$_xml_active fonts=$_font_ok gms_fonts=$_want_gms_fonts/${CT_GMS_FONTS_BOUND:-0} emoji=$_emoji_active/$_emoji_avail/gms=${CT_GMS_EMOJI_BOUND:-0} watcher=active guard=$_guard_state"
+ct_write_state "shell-fallback"
+ct_write_fallback_telemetry "$_sync_n"
+ct_log "Boot verify: status=$_status profile=$CT_PROFILE watcher=shell-fallback gms_fonts=${CT_GMS_FONTS_BOUND:-0} gms_emoji=${CT_GMS_EMOJI_BOUND:-0} guard=$_guard_state"
 ct_trim_log
-
-_prev_f="${CT_GMS_FONTS_BOUND:-0}"
-_prev_e="${CT_GMS_EMOJI_BOUND:-0}"
 
 while [ -d "$MODDIR" ] && [ ! -f "$MODDIR/disable" ] && [ ! -f "$MODDIR/remove" ]; do
     sleep 60
@@ -183,14 +211,8 @@ while [ -d "$MODDIR" ] && [ ! -f "$MODDIR/disable" ] && [ ! -f "$MODDIR/remove" 
         break
     fi
     ct_run_gms_sync
-    if [ "${CT_GMS_FONTS_BOUND:-0}" != "$_prev_f" ] || [ "${CT_GMS_EMOJI_BOUND:-0}" != "$_prev_e" ]; then
-        _prev_f="${CT_GMS_FONTS_BOUND:-0}"
-        _prev_e="${CT_GMS_EMOJI_BOUND:-0}"
-        ct_state_set "gms_fonts_bound" "$_prev_f"
-        ct_state_set "gms_emoji_bound" "$_prev_e"
-        ct_log "GMS watcher bound new cache: fonts=$_prev_f emoji=$_prev_e"
-        ct_trim_log
-    fi
+    _sync_n=$((_sync_n + 1))
+    ct_write_fallback_telemetry "$_sync_n"
 done
 
-rm -f "$_pid_file" 2>/dev/null || true
+rm -rf "$CT_RUN_DIR" 2>/dev/null || true

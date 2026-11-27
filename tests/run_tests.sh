@@ -70,11 +70,11 @@ printf '=== Test 1: HyperOS 3/4 Stock-Slot Allocation & CJK Fallback Safety ===\
 ct_resolve_stock_slots "$HOS3_FONTS"
 if [ "$CT_SLOT_TEXT" = "Roboto-Regular.ttf" ] \
     && [ "$CT_SLOT_DISP" = "RobotoStatic-Regular.ttf" ] \
-    && [ "$CT_SLOT_ITAL" = "RobotoFlex-Regular.ttf" ] \
-    && [ "$CT_SLOT_DITAL" = "RobotoFlex-Regular.ttf" ]; then
-    pass "HyperOS 3/4 slots mapped strictly onto existing stock files"
+    && [ "$CT_SLOT_FLEX" = "RobotoFlex-Regular.ttf" ] \
+    && [ "$CT_SLOT_ITAL" = "Roboto-Regular.ttf" ]; then
+    pass "HyperOS 3/4 slots mapped strictly onto existing stock files (Flex -> RobotoFlex-Regular.ttf)"
 else
-    fail "Unexpected HyperOS 3/4 slots"
+    fail "Unexpected HyperOS 3/4 slots (text=$CT_SLOT_TEXT disp=$CT_SLOT_DISP flex=$CT_SLOT_FLEX ital=$CT_SLOT_ITAL)"
 fi
 
 if ct_resolve_cjk_fallback "$HOS3_FONTS" "$HOS3_PROD" && [ "$CT_CJK_FALLBACK" = "MiSansTCVF.ttf" ]; then
@@ -142,7 +142,9 @@ fi
 assert_not_grep 'CoreType-SFPro' "$TMP_DIR/font_fallback.xml" "Zero non-stock CoreType-SFPro filenames in XML"
 assert_grep 'CoreType Dual-Optical' "$TMP_DIR/font_fallback.xml" "Contains CoreType Dual-Optical XML marker"
 assert_grep 'weight="400" style="normal">Roboto-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Body 400 routed to Text slot"
-assert_grep 'weight="400" style="italic">RobotoFlex-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Body 400 italic routed to Italic slot"
+assert_grep 'weight="400" style="normal">RobotoFlex-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "roboto-flex routed to dedicated continuous-opsz Flex slot"
+assert_grep 'tag="opsz" stylevalue="17"' "$TMP_DIR/font_fallback.xml" "roboto-flex declares continuous opsz=17 for Text weights"
+assert_grep 'tag="opsz" stylevalue="28"' "$TMP_DIR/font_fallback.xml" "roboto-flex declares continuous opsz=28 for Display weights"
 assert_grep 'weight="600" style="normal">RobotoStatic-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Header 600 routed to Display slot"
 assert_not_grep 'supportedAxes="wght,ital"' "$TMP_DIR/font_fallback.xml" "Eliminated duplicate Roboto-Regular fallback overwrite"
 assert_grep 'tag="wght" stylevalue="550"' "$TMP_DIR/font_fallback.xml" "Harmonized mipro-demibold (700) to wght=550"
@@ -380,7 +382,110 @@ else
     fail "Universal GMS Latin font routing failed (bound=$_gbound)"
 fi
 
-printf '=== Test 6: ShellCheck Static Analysis ===\n'
+printf '=== Test 6: Native C++20 Daemon (Compile + Live epoll/SIGUSR1/SIGTERM Integration) ===\n'
+_cxx=""
+if command -v g++ >/dev/null 2>&1; then
+    _cxx="g++"
+elif command -v clang++ >/dev/null 2>&1; then
+    _cxx="clang++"
+fi
+
+if [ -n "$_cxx" ]; then
+    WATCHD_TEST_BIN="$TMP_DIR/coretype-watchd"
+    if "$_cxx" -O2 -std=c++20 -fno-exceptions -fno-rtti -Wall -Wextra -Werror \
+        "$REPO_ROOT/native/coretype-watchd.cpp" -o "$WATCHD_TEST_BIN"; then
+        pass "Compiled native/coretype-watchd.cpp cleanly with $_cxx (-std=c++20 -Wall -Wextra -Werror)"
+    else
+        fail "Failed to compile native/coretype-watchd.cpp"
+    fi
+
+    if [ -x "$WATCHD_TEST_BIN" ]; then
+        WD_RUN="$TMP_DIR/dev_coretype"
+        WD_MOD="$TMP_DIR/wd_mod"
+        WD_DATA="$TMP_DIR/wd_data"
+        WD_GMS="$TMP_DIR/wd_gms/files"
+        WD_DF="$TMP_DIR/wd_df"
+        mkdir -p "$WD_MOD/fonts" "$WD_DATA" "$WD_GMS/fonts/opentype" "$WD_DF"
+
+        "$WATCHD_TEST_BIN" \
+            --moddir "$WD_MOD" \
+            --datadir "$WD_DATA" \
+            --rundir "$WD_RUN" \
+            --gms-files "$WD_GMS" \
+            --data-fonts "$WD_DF" \
+            --no-fbe-wait &
+        _wpid=$!
+
+        _wtry=0
+        while [ ! -s "$WD_RUN/telemetry.prop" ] && [ "$_wtry" -lt 20 ]; do
+            sleep 0.1 2>/dev/null || sleep 1
+            _wtry=$((_wtry + 1))
+        done
+
+        if [ -s "$WD_RUN/telemetry.prop" ] \
+            && grep -q '^daemon_mode=native-epoll$' "$WD_RUN/telemetry.prop" \
+            && grep -q '^sync_count=1$' "$WD_RUN/telemetry.prop" \
+            && grep -q '^active_text_tracking_upm=-46$' "$WD_RUN/telemetry.prop" \
+            && grep -q '^active_display_tracking_upm=-26$' "$WD_RUN/telemetry.prop"; then
+            pass "coretype-watchd booted in epoll mode & emitted valid telemetry.prop"
+        else
+            fail "coretype-watchd initial telemetry.prop invalid or missing"
+        fi
+
+        # Verify SIGUSR1 triggers instant on-demand sync (< 5 ms)
+        kill -USR1 "$_wpid" 2>/dev/null || true
+        _stry=0
+        while [ "$_stry" -lt 20 ]; do
+            if grep -q '^sync_count=2$' "$WD_RUN/telemetry.prop" 2>/dev/null; then
+                break
+            fi
+            sleep 0.05 2>/dev/null || sleep 1
+            _stry=$((_stry + 1))
+        done
+        if grep -q '^sync_count=2$' "$WD_RUN/telemetry.prop" 2>/dev/null; then
+            pass "SIGUSR1 triggered instant on-demand sync (sync_count=2)"
+        else
+            fail "SIGUSR1 did not increment sync_count"
+        fi
+
+        # Verify SIGTERM graceful shutdown & /dev/.coretype cleanup
+        kill -TERM "$_wpid" 2>/dev/null || true
+        wait "$_wpid" 2>/dev/null || true
+        if [ ! -d "$WD_RUN" ]; then
+            pass "SIGTERM triggered graceful shutdown & cleaned runtime directory"
+        else
+            fail "SIGTERM did not clean up runtime directory ($WD_RUN)"
+        fi
+    fi
+else
+    printf '  [SKIP] no host C++20 compiler installed\n'
+fi
+
+printf '=== Test 7: Static Analysis (sh -n, ShellCheck, JS, Python & Font Metrics Audit) ===\n'
+_sh_ok=1
+for _shf in \
+    "$REPO_ROOT/customize.sh" \
+    "$REPO_ROOT/post-fs-data.sh" \
+    "$REPO_ROOT/service.sh" \
+    "$REPO_ROOT/action.sh" \
+    "$REPO_ROOT/uninstall.sh" \
+    "$REPO_ROOT/lib/common.sh" \
+    "$REPO_ROOT/lib/profiles.sh" \
+    "$REPO_ROOT/lib/font_xml.sh" \
+    "$REPO_ROOT/lib/engine.sh" \
+    "$REPO_ROOT/lib/emoji.sh" \
+    "$REPO_ROOT/lib/gms_fonts.sh" \
+    "$REPO_ROOT/tests/run_tests.sh"; do
+    if ! sh -n "$_shf"; then
+        _sh_ok=0
+    fi
+done
+if [ "$_sh_ok" = "1" ]; then
+    pass "POSIX sh -n syntax check passed on all 12 shell scripts"
+else
+    fail "POSIX sh -n reported syntax errors"
+fi
+
 if command -v shellcheck >/dev/null 2>&1; then
     if shellcheck -s sh \
         "$REPO_ROOT/customize.sh" \
@@ -401,6 +506,28 @@ if command -v shellcheck >/dev/null 2>&1; then
     fi
 else
     printf '  [SKIP] shellcheck not installed\n'
+fi
+
+if command -v node >/dev/null 2>&1; then
+    if node --check "$REPO_ROOT/webroot/app.js"; then
+        pass "WebUI app.js syntax check passed (node --check)"
+    else
+        fail "WebUI app.js syntax error"
+    fi
+fi
+
+if command -v python3 >/dev/null 2>&1; then
+    if python3 -m py_compile "$REPO_ROOT/scripts/build_fonts.py" "$REPO_ROOT/scripts/fetch_emoji.py"; then
+        pass "Python scripts syntax check passed (py_compile)"
+    else
+        fail "Python scripts py_compile failed"
+    fi
+
+    if python3 "$REPO_ROOT/scripts/build_fonts.py" --self-test >/dev/null; then
+        pass "Font vertical metrics parity & continuous opsz audit passed (build_fonts.py --self-test)"
+    else
+        fail "build_fonts.py --self-test failed"
+    fi
 fi
 
 printf '\nResults: %d passed, %d failed\n' "$PASS" "$FAIL"

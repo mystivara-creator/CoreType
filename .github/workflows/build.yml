@@ -23,15 +23,37 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq p7zip-full cpio shellcheck zip python3-fonttools libharfbuzz-bin
 
-      - name: Run POSIX test suite & ShellCheck
+      - name: Run POSIX test suite, C++20 daemon tests & linters
         run: sh tests/run_tests.sh
 
-      - name: Build optical-calibrated SF Pro variable fonts (iOS 27.x)
+      - name: Compile native coretype-watchd (arm64-v8a / Android NDK C++20)
+        run: |
+          NDK_ROOT="${ANDROID_NDK_LATEST_HOME:-${ANDROID_NDK_HOME:-}}"
+          if [ -z "$NDK_ROOT" ] || [ ! -d "$NDK_ROOT" ]; then
+            NDK_ROOT=$(ls -d /usr/local/lib/android/sdk/ndk/* 2>/dev/null | sort -V | tail -n 1)
+          fi
+          echo "Using Android NDK: $NDK_ROOT"
+          CXX="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android29-clang++"
+          test -x "$CXX"
+          mkdir -p bin
+          "$CXX" -O2 -std=c++20 -fno-exceptions -fno-rtti \
+            -ffunction-sections -fdata-sections -Wl,--gc-sections \
+            -static-libstdc++ -Wall -Wextra -Werror -s \
+            native/coretype-watchd.cpp -o bin/coretype-watchd
+          file bin/coretype-watchd
+          ls -lh bin/coretype-watchd
+          readelf -d bin/coretype-watchd | grep NEEDED
+          if readelf -d bin/coretype-watchd | grep -q 'libc++_shared'; then
+            echo "ERROR: coretype-watchd must not depend on libc++_shared.so!"
+            exit 1
+          fi
+
+      - name: Build optical-calibrated SF Pro variable fonts (iOS 27.x + Continuous opsz Flex)
         run: |
           /usr/bin/python3 scripts/build_fonts.py --out-dir fonts
           ls -lh fonts/
 
-      - name: Verify HarfBuzz shaping & Apple calt clock colon
+      - name: Verify HarfBuzz shaping, continuous opsz & Apple calt clock colon
         run: |
           python3 - <<'PY'
           import json, subprocess
@@ -40,6 +62,7 @@ jobs:
               "fonts/CoreType-SFPro-Text-Italic.ttf",
               "fonts/CoreType-SFPro-Display.ttf",
               "fonts/CoreType-SFPro-Display-Italic.ttf",
+              "fonts/CoreType-SFPro-Flex.ttf",
               "fonts/CoreType-SFPro-GMS-Medium.ttf",
               "fonts/CoreType-SFPro-GMS-Bold.ttf",
           ]:
@@ -49,11 +72,17 @@ jobs:
           c_clock = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "09:41"], text=True))[2]["g"]
           c_text  = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "a:b"], text=True))[1]["g"]
           assert c_clock != c_text, "Apple calt centered clock colon did not activate!"
-          d_100 = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "100"], text=True))
-          assert all(g["dx"] == 0 for g in d_100), f"Unexpected negative tracking on Display digits: {d_100}"
+          for df in ("fonts/CoreType-SFPro-Display.ttf", "fonts/CoreType-SFPro-Flex.ttf"):
+              d_100 = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", df, "100"], text=True))
+              assert all(g["dx"] == 0 for g in d_100), f"Unexpected negative tracking on digits in {df}: {d_100}"
+          flex_14 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=14,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
+          flex_32 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=32,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
+          w14 = sum(g["ax"] for g in flex_14)
+          w32 = sum(g["ax"] for g in flex_32)
+          assert w14 != w32, f"Flex continuous opsz axis had no visual advance delta ({w14} vs {w32})!"
           s_jdm = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Text.ttf", "Yanz 25 \u02b2\u1d48\u1d50"], text=True))
           assert all(g["g"] != ".notdef" for g in s_jdm), f"Missing superscript glyph in Phonetic Extensions: {s_jdm}"
-          print(f"[PASS] HarfBuzz GPOS tracking, pure digit spacing (100), Phonetic Extensions (jdm) & Apple calt colon verified ({c_text} -> {c_clock})")
+          print(f"[PASS] HarfBuzz GPOS tracking, Flex continuous opsz (14:{w14} vs 32:{w32}), pure digit spacing (100), Phonetic Extensions (jdm) & Apple calt colon verified ({c_text} -> {c_clock})")
           PY
 
       - name: Package CoreType Lite (SF Pro Only)
@@ -67,6 +96,7 @@ jobs:
             service.sh \
             action.sh \
             uninstall.sh \
+            bin/ \
             lib/ \
             fonts/ \
             webroot/ \
@@ -88,6 +118,7 @@ jobs:
             service.sh \
             action.sh \
             uninstall.sh \
+            bin/ \
             lib/ \
             fonts/ \
             webroot/ \

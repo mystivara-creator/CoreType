@@ -76,10 +76,11 @@ ct_sync_emoji_slots "$MODPATH" "$EMOJI_ENABLED" "/system/fonts"
 ct_ui_print "- Profile: $CT_PROFILE_LABEL ($CT_PROFILE)"
 ct_ui_print "- Dynamic Weight Curve: $CT_CONTRAST_LABEL | Bias ${CT_WEIGHT_BIAS}"
 ct_ui_print "- KernelSU-Umount-Safe Stock Slots (shared inode):"
-ct_ui_print "  Text    (opsz 17) -> $CT_SLOT_TEXT"
-ct_ui_print "  Display (opsz 28) -> $CT_SLOT_DISP"
-ct_ui_print "  Italic  (opsz 17) -> $CT_SLOT_ITAL"
-ct_ui_print "  DispIt  (opsz 28) -> $CT_SLOT_DITAL"
+ct_ui_print "  Text    (opsz 17)    -> $CT_SLOT_TEXT"
+ct_ui_print "  Display (opsz 28)    -> $CT_SLOT_DISP"
+ct_ui_print "  Flex    (opsz 12-36) -> ${CT_SLOT_FLEX:-$CT_SLOT_TEXT}"
+ct_ui_print "  Italic  (opsz 17)    -> $CT_SLOT_ITAL"
+ct_ui_print "  DispIt  (opsz 28)    -> $CT_SLOT_DITAL"
 
 if [ "$CT_MISANS_SLIDER_ACTIVE" = "1" ]; then
     ct_ui_print "- HyperOS MiSans + Weight Slider: ENABLED (CJK safe via $CT_CJK_FALLBACK)"
@@ -122,6 +123,10 @@ set_perm "$MODPATH/post-fs-data.sh" 0 0 0755
 set_perm "$MODPATH/service.sh" 0 0 0755
 set_perm "$MODPATH/action.sh" 0 0 0755
 set_perm "$MODPATH/uninstall.sh" 0 0 0755
+if [ -f "$MODPATH/bin/coretype-watchd" ]; then
+    set_perm "$MODPATH/bin/coretype-watchd" 0 0 0755
+    ct_ui_print "- Native C++20 Event Daemon (coretype-watchd): INSTALLED"
+fi
 
 ct_state_write_all \
     "status=pending_reboot" \
@@ -138,13 +143,14 @@ ct_state_write_all \
     "patched_xmls=$CT_PATCHED_COUNT" \
     "slot_text=$CT_SLOT_TEXT" \
     "slot_disp=$CT_SLOT_DISP" \
+    "slot_flex=${CT_SLOT_FLEX:-$CT_SLOT_TEXT}" \
     "slot_ital=$CT_SLOT_ITAL" \
     "misans_slider=$CT_MISANS_SLIDER_ACTIVE" \
     "cjk_fallback=${CT_CJK_FALLBACK:-none}" \
     "emoji_available=$CT_EMOJI_AVAILABLE" \
     "emoji_active=$CT_EMOJI_ACTIVE" \
     "ota_status=synced" \
-    "optical_engine=dual_master_dynamic_curve_umount_safe" \
+    "optical_engine=coretext_parity_continuous_opsz_epoll" \
     "bootloop_guard=armed"
 
 ct_log "Installed CoreType v1.2.0 (profile=$CT_PROFILE curve=${CT_ROM_CURVE:-hyperos_mipro}/bias=$CT_WEIGHT_BIAS/$CT_CONTRAST_MODE xmls=$CT_PATCHED_COUNT misans=$CT_MISANS_SLIDER_ACTIVE gms_fonts=$GMS_FONTS_ENABLED emoji=$CT_EMOJI_ACTIVE/$CT_EMOJI_AVAILABLE)"

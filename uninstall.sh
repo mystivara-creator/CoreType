@@ -1,12 +1,13 @@
 #!/system/bin/sh
-# CoreType — Clean Uninstall
+# CoreType — Clean Uninstall (Gracefully stops native coretype-watchd & cleans /dev/.coretype)
 
-_pid_file="/data/adb/coretype/watcher.pid"
-if [ -r "$_pid_file" ]; then
-    _wpid=$(tr -cd '0-9' < "$_pid_file" 2>/dev/null)
-    if [ -n "$_wpid" ]; then
-        kill "$_wpid" 2>/dev/null || true
+for _pf in /dev/.coretype/watchd.pid /data/adb/coretype/watcher.pid; do
+    if [ -r "$_pf" ]; then
+        _wpid=$(tr -cd '0-9' < "$_pf" 2>/dev/null)
+        if [ -n "$_wpid" ]; then
+            kill -TERM "$_wpid" 2>/dev/null || true
+        fi
     fi
-fi
+done
 
-rm -rf /data/adb/coretype 2>/dev/null || true
+rm -rf /dev/.coretype /data/adb/coretype 2>/dev/null || true

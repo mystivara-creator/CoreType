@@ -3,6 +3,8 @@
 
   const STATE_FILE = "/data/adb/coretype/state.prop";
   const CONF_FILE = "/data/adb/coretype/config.conf";
+  const TELEM_FILE = "/dev/.coretype/telemetry.prop";
+  const WATCHD_PID_FILE = "/dev/.coretype/watchd.pid";
   const VALID_PROFILES = ["dynamic_optical", "native_pro", "compact_crisp"];
   const VALID_CONTRASTS = ["soft", "balanced", "apple_native"];
 
@@ -83,6 +85,37 @@
     return `${sign}${bias} · ${tag}`;
   }
 
+  function formatLatency(usRaw) {
+    const us = parseInt(usRaw || "0", 10);
+    if (Number.isNaN(us) || us <= 0) return "< 1 ms";
+    if (us < 1000) return `${us} µs`;
+    return `${(us / 1000).toFixed(2)} ms`;
+  }
+
+  function renderLiveTelemetry(tm, st) {
+    const mode = tm.daemon_mode || st.gms_watcher || "idle";
+    const pill = document.getElementById("daemon-pill");
+    pill.textContent = mode;
+    pill.className = "pill " + (mode === "native-epoll" ? "pill-live" : "");
+
+    const rss = parseInt(tm.daemon_rss_kb || "0", 10);
+    document.getElementById("tm-rss").textContent = rss > 0 ? `${rss} KB` : "—";
+    document.getElementById("tm-pid").textContent = tm.daemon_pid ? `PID ${tm.daemon_pid}` : "Idle";
+
+    const latinCnt = parseInt(tm.gms_latin_mounted || st.gms_fonts_bound || "0", 10);
+    const emojiCnt = parseInt(tm.gms_emoji_mounted || st.gms_emoji_bound || "0", 10);
+    document.getElementById("tm-mounts").textContent = `${latinCnt + emojiCnt} active`;
+    document.getElementById("tm-mounts-sub").textContent = `${latinCnt} Latin · ${emojiCnt} Emoji`;
+
+    document.getElementById("tm-latency").textContent = formatLatency(tm.last_sync_latency_us);
+    const sc = parseInt(tm.sync_count || "0", 10);
+    document.getElementById("tm-syncs").textContent = `${sc} sync${sc === 1 ? "" : "s"}`;
+
+    const tUpm = tm.active_text_tracking_upm || "-46";
+    const dUpm = tm.active_display_tracking_upm || "-26";
+    document.getElementById("tm-trak").textContent = `${tUpm} / ${dUpm}`;
+  }
+
   function updateLiveSpecimen() {
     const wClock = calcWght(200, romCurve, wantedContrast, wantedBias);
     const wBody = calcWght(400, romCurve, wantedContrast, wantedBias);
@@ -135,9 +168,10 @@
   }
 
   async function loadState() {
-    const [stRes, cfRes] = await Promise.all([
+    const [stRes, cfRes, tmRes] = await Promise.all([
       execShell(`cat ${STATE_FILE} 2>/dev/null`),
       execShell(`cat ${CONF_FILE} 2>/dev/null`),
+      execShell(`cat ${TELEM_FILE} 2>/dev/null`),
     ]);
 
     const badge = document.getElementById("status-badge");
@@ -155,10 +189,23 @@
       selectButton("dynamic_optical");
       selectContrast("balanced");
       updateLiveSpecimen();
+      renderLiveTelemetry(
+        {
+          daemon_mode: "native-epoll",
+          daemon_pid: "4128",
+          daemon_rss_kb: "212",
+          gms_latin_mounted: "12",
+          gms_emoji_mounted: "3",
+          sync_count: "2",
+          last_sync_latency_us: "840",
+          active_text_tracking_upm: "-46",
+          active_display_tracking_upm: "-26",
+        },
+        {}
+      );
       document.getElementById("kv-profile").textContent = "iOS Optical Dynamic";
       document.getElementById("kv-curve").textContent = "HyperOS Auto · Bias 0 · Balanced";
-      document.getElementById("kv-gms-fonts").textContent = "Active (GMS Bound)";
-      document.getElementById("kv-mounted").textContent = "Dual-Optical VF (Shared Inode)";
+      document.getElementById("kv-flex").textContent = "RobotoFlex (opsz 12–36)";
       document.getElementById("kv-slots").textContent = "Roboto · Static · Flex";
       document.getElementById("kv-misans").textContent = "Active (CJK: MiSansTCVF)";
       document.getElementById("kv-emoji").textContent = "Active (iOS 26.4 · 3 GMS bound)";
@@ -169,6 +216,7 @@
 
     const st = parseProps(stRes.out);
     const cf = parseProps(cfRes.out);
+    const tm = parseProps(tmRes.out);
 
     const isActive = st.status === "active";
     badge.textContent = isActive ? "Active" : st.status === "safe_disabled" ? "Safe Mode" : "Degraded";
@@ -191,16 +239,11 @@
     biasSlider.value = String(wantedBias);
     selectContrast(wantedContrast);
     updateLiveSpecimen();
+    renderLiveTelemetry(tm, st);
 
     wantedGmsFonts = cf.gms_fonts_enabled === "0" ? "0" : "1";
     appliedGmsFonts = cf.applied_gms_fonts === "0" ? "0" : (st.gms_fonts_enabled === "0" ? "0" : "1");
     gmsToggle.checked = wantedGmsFonts === "1";
-
-    const gmsFontBound = parseInt(st.gms_fonts_bound || "0", 10);
-    document.getElementById("kv-gms-fonts").textContent =
-      appliedGmsFonts === "1"
-        ? (gmsFontBound > 0 ? `Active (${gmsFontBound} GMS bound)` : "Active (GMS-Aware)")
-        : "Disabled";
 
     emojiAvailable = st.emoji_available === "1";
     wantedEmoji = cf.emoji_enabled === "0" ? "0" : "1";
@@ -209,7 +252,7 @@
     if (emojiAvailable) {
       emojiToggle.disabled = false;
       emojiToggle.checked = wantedEmoji === "1";
-      const gmsBound = parseInt(st.gms_emoji_bound || "0", 10);
+      const gmsBound = parseInt(tm.gms_emoji_mounted || st.gms_emoji_bound || "0", 10);
       document.getElementById("kv-emoji").textContent =
         st.emoji_active === "1"
           ? (gmsBound > 0 ? `Active (iOS 26.4 · ${gmsBound} GMS bound)` : "Active (iOS 26.4 · GMS-Aware)")
@@ -229,12 +272,15 @@
     const cLabel = st.contrast_label || (appliedContrast === "soft" ? "Soft" : appliedContrast === "apple_native" ? "Apple Native" : "Balanced");
     document.getElementById("kv-curve").textContent = `${romTag} · Bias ${biasTxt} · ${cLabel}`;
 
-    document.getElementById("kv-mounted").textContent =
-      st.font_mounted === "1" ? "Dual-Optical VF (Shared Inode)" : "Not Mounted";
-
     const shortSlot = (name) => (name || "—").replace(/-Regular\.ttf$|\.ttf$|\.otf$|\.ttc$/g, "");
+    const flexSlot = st.slot_flex || st.slot_text || "";
+    document.getElementById("kv-flex").textContent =
+      flexSlot && flexSlot !== st.slot_text
+        ? `${shortSlot(flexSlot)} (opsz 12–36)`
+        : "Dual-Master (17 / 28)";
+
     document.getElementById("kv-slots").textContent =
-      st.slot_text ? `${shortSlot(st.slot_text)} · ${shortSlot(st.slot_disp)} · ${shortSlot(st.slot_ital)}` : "—";
+      st.slot_text ? `${shortSlot(st.slot_text)} · ${shortSlot(st.slot_disp)} · ${shortSlot(flexSlot)}` : "—";
 
     document.getElementById("kv-misans").textContent =
       st.misans_slider === "1"
@@ -288,6 +334,25 @@
     syncRebootBanner();
   }
 
+  async function syncGmsNow() {
+    const btn = document.getElementById("sync-gms-btn");
+    const desc = document.getElementById("sync-gms-desc");
+    btn.disabled = true;
+    btn.textContent = "Syncing…";
+    const cmd = `if [ -r ${WATCHD_PID_FILE} ] && kill -0 "$(cat ${WATCHD_PID_FILE})" 2>/dev/null; then kill -USR1 "$(cat ${WATCHD_PID_FILE})" && sleep 0.08 2>/dev/null; echo "SIGUSR1 dispatched to coretype-watchd."; else sh /data/adb/modules/coretype/action.sh 2>&1; fi`;
+    const res = await execShell(cmd);
+    if (res.code === 0) {
+      desc.textContent = (res.out || "Sync signal dispatched.").trim();
+      await loadState();
+    } else if (res.code === -1) {
+      desc.textContent = "Preview mode: SIGUSR1 triggers coretype-watchd natively in KernelSU / APatch.";
+    } else {
+      desc.textContent = "Sync completed (check coretype.log if any cache was locked).";
+    }
+    btn.textContent = "Sync Now";
+    btn.disabled = false;
+  }
+
   document.querySelectorAll(".profile-item").forEach((btn) => {
     btn.addEventListener("click", () => setProfile(btn.dataset.profile));
   });
@@ -310,24 +375,6 @@
   document.getElementById("gms-fonts-toggle").addEventListener("change", (ev) => {
     setGmsFonts(ev.target.checked);
   });
-
-  async function syncGmsNow() {
-    const btn = document.getElementById("sync-gms-btn");
-    const desc = document.getElementById("sync-gms-desc");
-    btn.disabled = true;
-    btn.textContent = "Syncing…";
-    const res = await execShell("sh /data/adb/modules/coretype/action.sh 2>&1");
-    if (res.code === 0) {
-      desc.textContent = (res.out || "GMS cache synced cleanly.").trim();
-      await loadState();
-    } else if (res.code === -1) {
-      desc.textContent = "Preview mode: action.sh runs natively inside KernelSU / APatch.";
-    } else {
-      desc.textContent = "Sync completed (check coretype.log if any cache was locked).";
-    }
-    btn.textContent = "Sync Now";
-    btn.disabled = false;
-  }
 
   document.getElementById("emoji-toggle").addEventListener("change", (ev) => {
     setEmoji(ev.target.checked);
