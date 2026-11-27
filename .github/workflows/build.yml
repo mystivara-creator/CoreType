@@ -45,7 +45,9 @@ jobs:
           assert c_clock != c_text, "Apple calt centered clock colon did not activate!"
           d_100 = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "100"], text=True))
           assert all(g["dx"] == 0 for g in d_100), f"Unexpected negative tracking on Display digits: {d_100}"
-          print(f"[PASS] HarfBuzz GPOS tracking, pure digit spacing (100) & Apple calt colon verified ({c_text} -> {c_clock})")
+          s_jdm = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Text.ttf", "Yanz 25 \u02b2\u1d48\u1d50"], text=True))
+          assert all(g["g"] != ".notdef" for g in s_jdm), f"Missing superscript glyph in Phonetic Extensions: {s_jdm}"
+          print(f"[PASS] HarfBuzz GPOS tracking, pure digit spacing (100), Phonetic Extensions (jdm) & Apple calt colon verified ({c_text} -> {c_clock})")
           PY
 
       - name: Package CoreType Lite (SF Pro Only)
