@@ -70,12 +70,13 @@ ct_load_slots() {
     [ -n "${CT_SLOT_TEXT:-}" ] || ct_resolve_stock_slots "/system/fonts"
 }
 
-# Usage: ct_emit_font_entry <weight> <normal|italic> <text|display> <wdth>
+# Usage: ct_emit_font_entry <weight> <normal|italic> <text|display> <wdth> [wght_axis]
 ct_emit_font_entry() {
     _w="$1"
     _style="$2"
     _optical="$3"
     _wdth="$4"
+    _wght="${5:-$_w}"
 
     if [ "$_optical" = "display" ]; then
         if [ "$_style" = "italic" ]; then
@@ -92,7 +93,7 @@ ct_emit_font_entry() {
     fi
 
     printf '        <font weight="%s" style="%s">%s\n' "$_w" "$_style" "$_file"
-    printf '            <axis tag="wght" stylevalue="%s" />\n' "$_w"
+    printf '            <axis tag="wght" stylevalue="%s" />\n' "$_wght"
     if [ "$_style" = "normal" ]; then
         printf '            <axis tag="wdth" stylevalue="%s" />\n' "$_wdth"
     fi
@@ -104,28 +105,30 @@ ct_emit_sans_serif_block() {
     printf '    <!-- CoreType Dual-Optical -->\n'
     printf '    %s\n' "$_open_tag"
     # Thin / Light (Lockscreen Clocks & Display Hero) -> SF Pro Display (opsz=28 + Display trak)
-    ct_emit_font_entry 100 normal display "$CT_WDTH_DISP"
-    ct_emit_font_entry 100 italic display "$CT_WDTH_DISP"
-    ct_emit_font_entry 200 normal display "$CT_WDTH_DISP"
-    ct_emit_font_entry 200 italic display "$CT_WDTH_DISP"
-    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP"
-    ct_emit_font_entry 300 italic display "$CT_WDTH_DISP"
+    ct_emit_font_entry 100 normal display "$CT_WDTH_DISP" 150
+    ct_emit_font_entry 100 italic display "$CT_WDTH_DISP" 150
+    ct_emit_font_entry 200 normal display "$CT_WDTH_DISP" 230
+    ct_emit_font_entry 200 italic display "$CT_WDTH_DISP" 230
+    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP" 310
+    ct_emit_font_entry 300 italic display "$CT_WDTH_DISP" 310
     # Body / Chat / Notifications / UI Labels -> SF Pro Text (opsz=17 + Text trak)
-    ct_emit_font_entry 350 normal text "$CT_WDTH_TEXT"
-    ct_emit_font_entry 400 normal text "$CT_WDTH_TEXT"
-    ct_emit_font_entry 400 italic text "$CT_WDTH_TEXT"
-    ct_emit_font_entry 500 normal text "$CT_WDTH_MID"
-    ct_emit_font_entry 500 italic text "$CT_WDTH_MID"
-    # Headers / Settings Titles / App Bars / Bold -> SF Pro Display (opsz=28 + Display trak)
-    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP"
-    ct_emit_font_entry 600 italic display "$CT_WDTH_DISP"
-    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP"
-    ct_emit_font_entry 700 italic display "$CT_WDTH_DISP"
-    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP"
-    ct_emit_font_entry 800 italic display "$CT_WDTH_DISP"
-    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP"
-    ct_emit_font_entry 900 italic display "$CT_WDTH_DISP"
-    ct_emit_font_entry 950 normal display "$CT_WDTH_DISP"
+    ct_emit_font_entry 350 normal text "$CT_WDTH_TEXT" 370
+    ct_emit_font_entry 400 normal text "$CT_WDTH_TEXT" 400
+    ct_emit_font_entry 400 italic text "$CT_WDTH_TEXT" 400
+    ct_emit_font_entry 500 normal text "$CT_WDTH_MID" 500
+    ct_emit_font_entry 500 italic text "$CT_WDTH_MID" 500
+    # Headers / Section Labels / Bold -> SF Pro Display (opsz=28 + Display trak)
+    # Calibrated for HyperOS mipro weight offsets (mipro-demibold=700 -> iOS Semibold 590,
+    # mipro-semibold=800 -> iOS Bold 680, mipro-bold=900 -> iOS Heavy 760).
+    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP" 550
+    ct_emit_font_entry 600 italic display "$CT_WDTH_DISP" 550
+    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP" 590
+    ct_emit_font_entry 700 italic display "$CT_WDTH_DISP" 590
+    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP" 680
+    ct_emit_font_entry 800 italic display "$CT_WDTH_DISP" 680
+    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP" 760
+    ct_emit_font_entry 900 italic display "$CT_WDTH_DISP" 760
+    ct_emit_font_entry 950 normal display "$CT_WDTH_DISP" 850
     printf '    </family>\n'
 }
 

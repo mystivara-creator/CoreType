@@ -127,6 +127,8 @@ assert_grep 'weight="100" style="normal">RobotoStatic-Regular\.ttf' "$TMP_DIR/fo
 assert_not_grep 'supportedAxes="wght,ital"' "$TMP_DIR/font_fallback.xml" "Eliminated HyperOS 3 duplicate Roboto-Regular fallback overwrite"
 assert_grep 'tag="wdth" stylevalue="96\.5"' "$TMP_DIR/font_fallback.xml" "Calibrated Text width wdth=96.5"
 assert_grep 'tag="wdth" stylevalue="97\.0"' "$TMP_DIR/font_fallback.xml" "Calibrated Display width wdth=97.0"
+assert_grep 'tag="wght" stylevalue="590"' "$TMP_DIR/font_fallback.xml" "Calibrated mipro-demibold (700) to iOS Semibold wght=590"
+assert_grep 'tag="wght" stylevalue="680"' "$TMP_DIR/font_fallback.xml" "Calibrated mipro-semibold (800) to iOS Bold wght=680"
 assert_grep 'tag="wdth" stylevalue="82\.0"' "$TMP_DIR/font_fallback.xml" "Optical condensed width wdth=82.0"
 assert_not_grep 'MiSansVF_Overlay\.ttf' "$TMP_DIR/font_fallback.xml" "Replaced MiSansVF_Overlay.ttf in sans-serif"
 assert_not_grep 'MiSansLatinVF\.ttf' "$TMP_DIR/font_fallback.xml" "Replaced MiSansLatinVF.ttf in Latin family"
