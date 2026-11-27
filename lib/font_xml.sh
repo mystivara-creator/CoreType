@@ -135,26 +135,26 @@ ct_emit_sans_serif_block() {
 ct_emit_condensed_block() {
     _open_tag="$1"
     printf '    %s\n' "$_open_tag"
-    ct_emit_font_entry 300 normal display "$CT_WDTH_COND"
-    ct_emit_font_entry 400 normal text "$CT_WDTH_COND"
-    ct_emit_font_entry 400 italic text "$CT_WDTH_COND"
-    ct_emit_font_entry 500 normal text "$CT_WDTH_COND"
-    ct_emit_font_entry 600 normal display "$CT_WDTH_COND"
-    ct_emit_font_entry 700 normal display "$CT_WDTH_COND"
-    ct_emit_font_entry 700 italic display "$CT_WDTH_COND"
+    ct_emit_font_entry 300 normal display "$CT_WDTH_COND" 310
+    ct_emit_font_entry 400 normal text "$CT_WDTH_COND" 400
+    ct_emit_font_entry 400 italic text "$CT_WDTH_COND" 400
+    ct_emit_font_entry 500 normal text "$CT_WDTH_COND" 500
+    ct_emit_font_entry 600 normal display "$CT_WDTH_COND" 550
+    ct_emit_font_entry 700 normal display "$CT_WDTH_COND" 590
+    ct_emit_font_entry 700 italic display "$CT_WDTH_COND" 590
     printf '    </family>\n'
 }
 
 ct_emit_display_block() {
     _open_tag="$1"
     printf '    %s\n' "$_open_tag"
-    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP"
-    ct_emit_font_entry 400 normal display "$CT_WDTH_DISP"
-    ct_emit_font_entry 500 normal display "$CT_WDTH_DISP"
-    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP"
-    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP"
-    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP"
-    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP"
+    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP" 310
+    ct_emit_font_entry 400 normal display "$CT_WDTH_DISP" 400
+    ct_emit_font_entry 500 normal display "$CT_WDTH_DISP" 500
+    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP" 550
+    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP" 590
+    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP" 680
+    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP" 760
     printf '    </family>\n'
 }
 

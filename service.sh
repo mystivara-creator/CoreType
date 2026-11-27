@@ -1,5 +1,6 @@
 #!/system/bin/sh
-# CoreType — Boot Completion Confirmation & WebUI Telemetry
+# CoreType — Zero-Daemon Boot Verification & Single-Pass Telemetry
+# Runs once at boot, disarms Bootloop Guard, writes state.prop atomically, and exits (0 KB persistent RAM).
 
 MODDIR="${0%/*}"
 
@@ -10,10 +11,10 @@ MODDIR="${0%/*}"
 # shellcheck disable=SC1091
 . "$MODDIR/lib/font_xml.sh"
 
-# Wait for Android boot completion (up to 90s for post-flash ART cache) before disarming Bootloop Guard
+# Low-overhead boot completion poll (2s interval, up to 90s for post-flash ART cache)
 _wait=0
-while [ "$(getprop sys.boot_completed 2>/dev/null)" != "1" ] && [ "$_wait" -lt 90 ]; do
-    sleep 1
+while [ "$(getprop sys.boot_completed 2>/dev/null)" != "1" ] && [ "$_wait" -lt 45 ]; do
+    sleep 2
     _wait=$((_wait + 1))
 done
 
@@ -53,16 +54,23 @@ else
     _status="degraded"
 fi
 
-ct_state_set "status" "$_status"
-ct_state_set "profile" "$CT_PROFILE"
-ct_state_set "profile_label" "$CT_PROFILE_LABEL"
-ct_state_set "wdth_text" "$CT_WDTH_TEXT"
-ct_state_set "wdth_disp" "$CT_WDTH_DISP"
-ct_state_set "font_mounted" "$_font_ok"
-ct_state_set "xml_active" "$_xml_active"
-ct_state_set "slot_text" "$CT_SLOT_TEXT"
-ct_state_set "slot_disp" "$CT_SLOT_DISP"
-ct_state_set "slot_ital" "$CT_SLOT_ITAL"
-ct_state_set "optical_engine" "dual_master_gpos_trak_umount_safe"
-ct_state_set "bootloop_guard" "$_guard_state"
+_ota_state=$(ct_conf_get "ota_status" "synced")
+
+# Single-pass atomic write (1 rename instead of 12 forks)
+ct_state_write_all \
+    "status=$_status" \
+    "profile=$CT_PROFILE" \
+    "profile_label=$CT_PROFILE_LABEL" \
+    "wdth_text=$CT_WDTH_TEXT" \
+    "wdth_disp=$CT_WDTH_DISP" \
+    "font_mounted=$_font_ok" \
+    "xml_active=$_xml_active" \
+    "slot_text=$CT_SLOT_TEXT" \
+    "slot_disp=$CT_SLOT_DISP" \
+    "slot_ital=$CT_SLOT_ITAL" \
+    "ota_status=$_ota_state" \
+    "optical_engine=dual_master_gpos_trak_umount_safe" \
+    "bootloop_guard=$_guard_state"
+
 ct_log "Boot verify: status=$_status profile=$CT_PROFILE xml=$_xml_active fonts=$_font_ok guard=$_guard_state"
+ct_trim_log

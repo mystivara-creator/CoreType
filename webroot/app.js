@@ -53,9 +53,10 @@
       selectButton("dynamic_optical");
       document.getElementById("kv-profile").textContent = "iOS Optical Dynamic";
       document.getElementById("kv-mounted").textContent = "4/4 Dual-Optical VF";
+      document.getElementById("kv-slots").textContent = "Roboto · Static · Flex";
       document.getElementById("kv-xml").textContent = "font_fallback.xml";
       document.getElementById("kv-wdth").textContent = "96.5 / 97.0";
-      document.getElementById("kv-guard").textContent = "Healthy";
+      document.getElementById("kv-guard").textContent = "Healthy · OTA Synced";
       return;
     }
 
@@ -72,12 +73,16 @@
 
     document.getElementById("kv-profile").textContent = st.profile_label || appliedProfile;
     document.getElementById("kv-mounted").textContent =
-      st.font_mounted === "1" ? "4/4 Dual-Optical VF" : "Not Mounted";
+      st.font_mounted === "1" ? "Dual-Optical VF (Shared Inode)" : "Not Mounted";
+    const shortSlot = (name) => (name || "—").replace(/-Regular\.ttf$|\.ttf$/g, "");
+    document.getElementById("kv-slots").textContent =
+      st.slot_text ? `${shortSlot(st.slot_text)} · ${shortSlot(st.slot_disp)} · ${shortSlot(st.slot_ital)}` : "—";
     document.getElementById("kv-xml").textContent = st.xml_active || "none";
     document.getElementById("kv-wdth").textContent =
       st.wdth_text && st.wdth_disp ? `${st.wdth_text} / ${st.wdth_disp}` : "—";
-    document.getElementById("kv-guard").textContent =
-      st.bootloop_guard === "healthy" ? "Healthy (0 faults)" : (st.bootloop_guard || "Armed");
+    const guardText = st.bootloop_guard === "healthy" ? "Healthy" : (st.bootloop_guard || "Armed");
+    const otaText = st.ota_status === "resynced" ? "OTA Resynced" : "OTA Synced";
+    document.getElementById("kv-guard").textContent = `${guardText} · ${otaText}`;
 
     document.getElementById("reboot-banner").classList.toggle("hidden", wanted === appliedProfile);
   }

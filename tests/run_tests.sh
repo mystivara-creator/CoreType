@@ -1,5 +1,5 @@
 #!/bin/sh
-# CoreType — Automated POSIX Test Suite (KernelSU-Umount-Safe Dual-Optical)
+# CoreType — Automated POSIX Test Suite (KernelSU-Umount-Safe Dual-Optical + OTA Engine)
 
 set -eu
 
@@ -45,6 +45,8 @@ assert_not_grep() {
 . "$REPO_ROOT/lib/profiles.sh"
 # shellcheck disable=SC1091
 . "$REPO_ROOT/lib/font_xml.sh"
+# shellcheck disable=SC1091
+. "$REPO_ROOT/lib/engine.sh"
 
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
@@ -204,7 +206,7 @@ else
     pass "Validator rejected missing font files"
 fi
 
-printf '=== Test 5: Config Helpers, Slot Persistence & Self-Healing Bootloop Guard ===\n'
+printf '=== Test 5: Unified Engine, Atomic State, Log Trim & Bootloop Guard ===\n'
 CT_DATA_DIR="$TMP_DIR/data"
 CT_CONF_FILE="$CT_DATA_DIR/config.conf"
 CT_STATE_FILE="$CT_DATA_DIR/state.prop"
@@ -217,22 +219,65 @@ else
     fail "ct_conf_get expected compact_crisp, got $_got"
 fi
 
-ct_resolve_stock_slots "$HOS3_FONTS"
-ct_save_slots
-CT_SLOT_TEXT="" CT_SLOT_DISP="" CT_SLOT_ITAL="" CT_SLOT_DITAL=""
-ct_load_slots
-if [ "$CT_SLOT_DISP" = "RobotoStatic-Regular.ttf" ] && [ "$CT_SLOT_ITAL" = "RobotoFlex-Regular.ttf" ]; then
-    pass "ct_save_slots / ct_load_slots round-trip"
+ct_state_write_all "status=active" "profile=dynamic_optical" "ota_status=synced"
+assert_grep '^status=active$' "$CT_STATE_FILE" "Atomic single-pass ct_state_write_all wrote state.prop"
+
+# Log trimming test (>16 KB -> trimmed to <=100 lines)
+_i=0
+while [ "$_i" -lt 400 ]; do
+    printf '[2026-11-26 00:00:00] Log entry number %04d padding text to exceed 16KB\n' "$_i" >> "$CT_LOG_FILE"
+    _i=$((_i + 1))
+done
+ct_trim_log
+_lines=$(wc -l < "$CT_LOG_FILE")
+if [ "$_lines" -le 100 ]; then
+    pass "ct_trim_log capped oversized log cleanly ($_lines lines)"
 else
-    fail "ct_load_slots failed"
+    fail "ct_trim_log failed to cap log ($_lines lines)"
+fi
+
+# Unified engine slot-sync + OTA multi-XML patch test with valid TrueType magic (>100 KB)
+FAKE_ROOT="$TMP_DIR/fakeroot"
+FAKE_MOD="$TMP_DIR/mod"
+mkdir -p "$FAKE_ROOT/system/etc" "$FAKE_ROOT/system_ext/etc" "$FAKE_ROOT/system/fonts" "$FAKE_ROOT/product/fonts"
+mkdir -p "$FAKE_MOD/lib" "$FAKE_MOD/fonts"
+cp "$REPO_ROOT/lib/"*.sh "$FAKE_MOD/lib/"
+cp "$REPO_ROOT/post-fs-data.sh" "$FAKE_MOD/"
+cp "$TMP_DIR/hyperos3_fallback.xml" "$FAKE_ROOT/system/etc/font_fallback.xml"
+cp "$TMP_DIR/hyperos3_fallback.xml" "$FAKE_ROOT/system_ext/etc/hyper_font_fallback.xml"
+for _sf in Roboto-Regular.ttf RobotoStatic-Regular.ttf RobotoFlex-Regular.ttf MiSansVF_Overlay.ttf; do
+    printf 'stock' > "$FAKE_ROOT/system/fonts/$_sf"
+done
+printf 'stock' > "$FAKE_ROOT/product/fonts/MiSansLatinVF.ttf"
+
+# Generate 110 KB mock TrueType binaries with valid 00 01 00 00 sfnt magic
+for _mf in CoreType-SFPro-Text.ttf CoreType-SFPro-Text-Italic.ttf CoreType-SFPro-Display.ttf CoreType-SFPro-Display-Italic.ttf; do
+    { printf '\000\001\000\000'; dd if=/dev/zero bs=1024 count=110 2>/dev/null; } > "$FAKE_MOD/fonts/$_mf"
+done
+
+if ct_verify_all_masters "$FAKE_MOD/fonts"; then
+    pass "ct_verify_all_masters validated TrueType magic & size"
+else
+    fail "ct_verify_all_masters failed on valid mock masters"
+fi
+
+ct_sync_stock_slots "$FAKE_MOD" "$FAKE_ROOT/system/fonts" "$FAKE_ROOT/product/fonts"
+if [ -s "$FAKE_MOD/system/fonts/Roboto-Regular.ttf" ] \
+    && [ -s "$FAKE_MOD/system/fonts/RobotoStatic-Regular.ttf" ] \
+    && [ -s "$FAKE_MOD/system/fonts/RobotoFlex-Regular.ttf" ] \
+    && [ -s "$FAKE_MOD/system/product/fonts/MiSansLatinVF.ttf" ]; then
+    pass "ct_sync_stock_slots populated all HyperOS 3 slots via shared inodes"
+else
+    fail "ct_sync_stock_slots missing expected slots"
+fi
+
+if ct_patch_all_xmls "$FAKE_MOD" "dynamic_optical" 1 "$FAKE_ROOT" && [ "$CT_PATCHED_COUNT" -eq 2 ]; then
+    pass "ct_patch_all_xmls patched system & system_ext XMLs cleanly ($CT_PATCHED_COUNT files)"
+else
+    fail "ct_patch_all_xmls failed (count=${CT_PATCHED_COUNT:-0})"
 fi
 
 # Simulate 2 failed boots and verify post-fs-data.sh auto-disables module
-FAKE_MOD="$TMP_DIR/mod"
-mkdir -p "$FAKE_MOD/lib" "$FAKE_MOD/system/fonts"
-cp "$REPO_ROOT/lib/"*.sh "$FAKE_MOD/lib/"
-cp "$REPO_ROOT/post-fs-data.sh" "$FAKE_MOD/"
-cp "$HOS3_FONTS/"*.ttf "$FAKE_MOD/system/fonts/"
 printf '2\n' > "$CT_DATA_DIR/boot_attempts"
 CT_DATA_DIR="$CT_DATA_DIR" sh "$FAKE_MOD/post-fs-data.sh"
 if [ -f "$FAKE_MOD/disable" ]; then
@@ -251,6 +296,7 @@ if command -v shellcheck >/dev/null 2>&1; then
         "$REPO_ROOT/lib/common.sh" \
         "$REPO_ROOT/lib/profiles.sh" \
         "$REPO_ROOT/lib/font_xml.sh" \
+        "$REPO_ROOT/lib/engine.sh" \
         "$REPO_ROOT/tests/run_tests.sh"; then
         pass "ShellCheck passed with 0 warnings"
     else

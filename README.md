@@ -19,12 +19,13 @@ Installing raw Apple `SF-Pro.ttf` on Android/HyperOS always feels lifeless and b
 - **Dual Optical Variable Masters (`opsz=17` Text & `opsz=28` Display):**
   - `CoreType-SFPro-Text.ttf` & `CoreType-SFPro-Text-Italic.ttf` (`wght 350–500`): Pure **SF Pro Text** (`opsz=17`) with Apple's **−46 UPM** iOS Text tracking baked non-destructively into OpenType `GPOS kern` (`SinglePos`, applied right after Apple's native `PairPos` kerning).
   - `CoreType-SFPro-Display.ttf` & `CoreType-SFPro-Display-Italic.ttf` (`wght 100–300` Clocks/Hero, `wght 600–950` Headers/Titles): Pure **SF Pro Display** (`opsz=28`) with Apple's **−26 UPM** Display tracking baked into `GPOS kern`.
-  - **100% Pure Apple Glyph Shapes:** `glyf`, `gvar`, `HVAR`, and accented diacritics remain untouched; Apple's iconic centered clock colon (`09:41` via `calt`) and tabular numerals (`tnum`) work natively.
-  - **100% Upright ↔ Italic Width Match** and full **HyperOS Variable Font Weight Slider** compatibility (`wght 1..1000`).
-- **Zero-Bootloop & KernelSU-Umount-Safe Architecture:**
+  - **HyperOS `mipro` Weight Calibration:** Compensates for HyperOS's +100/+200 `mipro-demibold` (`700 → wght 590`) and `mipro-semibold` (`800 → wght 680`) weight offsets so section headers look crisp and refined like native iOS.
+  - **100% Pure Apple Glyph Shapes & Ultra-Lean `gvar`:** Prunes unused Apple PUA symbols, desktop-only stylistic sets, and unused `wdth < 75 / > 100` extremes — shrinking `gvar` by **~75%** and cutting per-app `mmap` RAM while preserving **0-unit identical HarfBuzz shaping**, Apple's centered `09:41` clock colon (`calt`), and tabular numerals (`tnum`).
+- **Zero-Bootloop, Zero-Daemon & KernelSU-Umount-Safe Architecture:**
   - **100% Stock-Slot Mapping (Zero Non-Stock Filenames in XML):** Maps Dual-Optical SF Pro masters strictly onto existing stock `/system/fonts/` slots (`Roboto-Regular.ttf`, `RobotoStatic-Regular.ttf`, `RobotoFlex-Regular.ttf`, etc.). Even when KernelSU `umount modules` hides mounts inside Gboard or banking apps, every referenced stock filename still exists on disk — eliminating `minikin::Font::prepareFont` `SIGSEGV` crashes completely.
+  - **Automatic ROM / HyperOS OTA Resync:** Detects `ro.build.fingerprint` changes in `post-fs-data` (before mounts & Zygote) and automatically refreshes stock XML snapshots, stock slots, and patches — zero re-flashing needed after OTA updates.
   - **Self-Healing Bootloop Guard:** Automatically disables the module (`disable` flag) if 2 consecutive boots ever fail to reach `sys.boot_completed=1`.
-  - **Strict Structural XML Validator:** Verifies balanced `<familyset>`, `<family>`, `<font>` tags, rejects any non-stock font filenames, and confirms every slot binary exists before committing XML.
+  - **Zero Background Daemon (0 KB Persistent RAM):** `service.sh` verifies health, writes `state.prop` in one atomic pass, trims logs `< 16 KB`, and exits immediately.
   - **Shared-Inode Hardlinks & 100% Fallback Preservation:** Uses real `0644` hardlinks (no symlinks) to share Linux kernel RAM page cache; never touches `MiSansVF.ttf` (CJK), Arabic, Indic, `MiClock*.otf`, or `NotoColorEmoji.ttf`.
 - **WebUI Optical Profile Switcher (KSU / APatch / MMRL):**
   - `iOS Optical Dynamic` *(Recommended)* — pure shapes (`wdth 96.5 / 97.0`) + Apple GPOS `trak`
