@@ -4,6 +4,7 @@ dist/
 *.zip
 *.dmg
 *.pkg
+fonts/*.ttf
 system/fonts/*.ttf
 system/fonts/*.otf
 system/product/fonts/*.ttf

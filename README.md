@@ -21,11 +21,11 @@ Installing raw Apple `SF-Pro.ttf` on Android/HyperOS always feels lifeless and b
   - `CoreType-SFPro-Display.ttf` & `CoreType-SFPro-Display-Italic.ttf` (`wght 100–300` Clocks/Hero, `wght 600–950` Headers/Titles): Pure **SF Pro Display** (`opsz=28`) with Apple's **−26 UPM** Display tracking baked into `GPOS kern`.
   - **100% Pure Apple Glyph Shapes:** `glyf`, `gvar`, `HVAR`, and accented diacritics remain untouched; Apple's iconic centered clock colon (`09:41` via `calt`) and tabular numerals (`tnum`) work natively.
   - **100% Upright ↔ Italic Width Match** and full **HyperOS Variable Font Weight Slider** compatibility (`wght 1..1000`).
-- **Zero-Bootloop Safety Architecture:**
+- **Zero-Bootloop & KernelSU-Umount-Safe Architecture:**
+  - **100% Stock-Slot Mapping (Zero Non-Stock Filenames in XML):** Maps Dual-Optical SF Pro masters strictly onto existing stock `/system/fonts/` slots (`Roboto-Regular.ttf`, `RobotoStatic-Regular.ttf`, `RobotoFlex-Regular.ttf`, etc.). Even when KernelSU `umount modules` hides mounts inside Gboard or banking apps, every referenced stock filename still exists on disk — eliminating `minikin::Font::prepareFont` `SIGSEGV` crashes completely.
   - **Self-Healing Bootloop Guard:** Automatically disables the module (`disable` flag) if 2 consecutive boots ever fail to reach `sys.boot_completed=1`.
-  - **Strict Structural XML Validator:** Verifies balanced `<familyset>`, `<family>`, `<font>` tags and font binary existence before committing any XML.
-  - **Schema-Faithful Patching:** Preserves `postScriptName` in `font_fallback.xml` (Android 14–16 / HyperOS 3) while cleanly omitting it in legacy `fonts.xml` (`version="22"`).
-  - **SELinux-Safe Copies & 100% Fallback Preservation:** Uses real `0644` file copies (no symlinks) for `Roboto-Regular.ttf` & `MiSansLatinVF.ttf`; never touches `MiSansVF.ttf` (CJK), Arabic, Indic, `MiClock*.otf`, or `NotoColorEmoji.ttf`.
+  - **Strict Structural XML Validator:** Verifies balanced `<familyset>`, `<family>`, `<font>` tags, rejects any non-stock font filenames, and confirms every slot binary exists before committing XML.
+  - **Shared-Inode Hardlinks & 100% Fallback Preservation:** Uses real `0644` hardlinks (no symlinks) to share Linux kernel RAM page cache; never touches `MiSansVF.ttf` (CJK), Arabic, Indic, `MiClock*.otf`, or `NotoColorEmoji.ttf`.
 - **WebUI Optical Profile Switcher (KSU / APatch / MMRL):**
   - `iOS Optical Dynamic` *(Recommended)* — pure shapes (`wdth 96.5 / 97.0`) + Apple GPOS `trak`
   - `iOS Native Pro` — 100% uncompressed Apple width (`wdth 100.0`) + Apple GPOS `trak`

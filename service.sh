@@ -7,6 +7,8 @@ MODDIR="${0%/*}"
 . "$MODDIR/lib/common.sh"
 # shellcheck disable=SC1091
 . "$MODDIR/lib/profiles.sh"
+# shellcheck disable=SC1091
+. "$MODDIR/lib/font_xml.sh"
 
 # Wait for Android boot completion (up to 90s for post-flash ART cache) before disarming Bootloop Guard
 _wait=0
@@ -23,29 +25,24 @@ fi
 
 _prof=$(ct_conf_get "applied_profile" "dynamic_optical")
 ct_load_profile "$_prof"
+ct_load_slots
 
-_font_ok="1"
-for _req in \
-    CoreType-SFPro-Text.ttf \
-    CoreType-SFPro-Text-Italic.ttf \
-    CoreType-SFPro-Display.ttf \
-    CoreType-SFPro-Display-Italic.ttf; do
-    if [ ! -s "/system/fonts/$_req" ]; then
-        _font_ok="0"
-        break
-    fi
-done
+# Verify mounted stock font slots match CoreType's optical master byte sizes
+_font_ok="0"
+_want_sz=$(wc -c < "$MODDIR/fonts/CoreType-SFPro-Text.ttf" 2>/dev/null || echo 0)
+_live_sz=$(wc -c < "/system/fonts/$CT_SLOT_TEXT" 2>/dev/null || echo 1)
+if [ "$_want_sz" -gt 102400 ] && [ "$_want_sz" = "$_live_sz" ]; then
+    _font_ok="1"
+fi
 
 _xml_ok="0"
 _xml_active="none"
 if [ -r /system/etc/font_fallback.xml ] \
-    && grep -q 'CoreType-SFPro-Text\.ttf' /system/etc/font_fallback.xml 2>/dev/null \
-    && grep -q 'CoreType-SFPro-Display\.ttf' /system/etc/font_fallback.xml 2>/dev/null; then
+    && grep -q 'CoreType Dual-Optical' /system/etc/font_fallback.xml 2>/dev/null; then
     _xml_ok="1"
     _xml_active="font_fallback.xml"
 elif [ -r /system/etc/fonts.xml ] \
-    && grep -q 'CoreType-SFPro-Text\.ttf' /system/etc/fonts.xml 2>/dev/null \
-    && grep -q 'CoreType-SFPro-Display\.ttf' /system/etc/fonts.xml 2>/dev/null; then
+    && grep -q 'CoreType Dual-Optical' /system/etc/fonts.xml 2>/dev/null; then
     _xml_ok="1"
     _xml_active="fonts.xml"
 fi
@@ -63,6 +60,9 @@ ct_state_set "wdth_text" "$CT_WDTH_TEXT"
 ct_state_set "wdth_disp" "$CT_WDTH_DISP"
 ct_state_set "font_mounted" "$_font_ok"
 ct_state_set "xml_active" "$_xml_active"
-ct_state_set "optical_engine" "dual_master_gpos_trak"
+ct_state_set "slot_text" "$CT_SLOT_TEXT"
+ct_state_set "slot_disp" "$CT_SLOT_DISP"
+ct_state_set "slot_ital" "$CT_SLOT_ITAL"
+ct_state_set "optical_engine" "dual_master_gpos_trak_umount_safe"
 ct_state_set "bootloop_guard" "$_guard_state"
 ct_log "Boot verify: status=$_status profile=$CT_PROFILE xml=$_xml_active fonts=$_font_ok guard=$_guard_state"

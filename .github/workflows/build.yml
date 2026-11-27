@@ -24,24 +24,24 @@ jobs:
 
       - name: Build optical-calibrated SF Pro variable fonts
         run: |
-          /usr/bin/python3 scripts/build_fonts.py --out-dir system/fonts
-          ls -lh system/fonts/
+          /usr/bin/python3 scripts/build_fonts.py --out-dir fonts
+          ls -lh fonts/
 
       - name: Verify HarfBuzz shaping & Apple calt clock colon
         run: |
           python3 - <<'PY'
           import json, subprocess, sys
           for f in [
-              "system/fonts/CoreType-SFPro-Text.ttf",
-              "system/fonts/CoreType-SFPro-Text-Italic.ttf",
-              "system/fonts/CoreType-SFPro-Display.ttf",
-              "system/fonts/CoreType-SFPro-Display-Italic.ttf",
+              "fonts/CoreType-SFPro-Text.ttf",
+              "fonts/CoreType-SFPro-Text-Italic.ttf",
+              "fonts/CoreType-SFPro-Display.ttf",
+              "fonts/CoreType-SFPro-Display-Italic.ttf",
           ]:
               out = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", f, "Display & Typography"], text=True))
               assert sum(g["ax"] for g in out) > 0, f"Zero advance in {f}"
               assert any(g["dx"] < 0 for g in out), f"GPOS tracking missing in {f}"
-          c_clock = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "system/fonts/CoreType-SFPro-Display.ttf", "09:41"], text=True))[2]["g"]
-          c_text  = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "system/fonts/CoreType-SFPro-Display.ttf", "a:b"], text=True))[1]["g"]
+          c_clock = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "09:41"], text=True))[2]["g"]
+          c_text  = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "a:b"], text=True))[1]["g"]
           assert c_clock != c_text, "Apple calt centered clock colon did not activate!"
           print(f"[PASS] HarfBuzz GPOS tracking & Apple calt clock colon verified ({c_text} -> {c_clock})")
           PY
@@ -57,7 +57,7 @@ jobs:
             service.sh \
             uninstall.sh \
             lib/ \
-            system/ \
+            fonts/ \
             webroot/ \
             -x '*.DS_Store'
           ls -lh "dist/CoreType-${VERSION}.zip"

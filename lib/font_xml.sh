@@ -1,40 +1,97 @@
 #!/system/bin/sh
-# CoreType — Schema-Faithful Dual-Optical XML Patcher & Structural Validator
-# Routes Body (350..500) -> CoreType-SFPro-Text (opsz=17 + Apple Text trak)
-# Routes Headers (600..950) & Clocks (100..300) -> CoreType-SFPro-Display (opsz=28 + Apple Display trak)
-# Preserves 100% of device fallback families (CJK, Arabic, Indic, Emoji, Symbols).
+# CoreType — KernelSU-Umount-Safe Dual-Optical XML Patcher & Structural Validator
+#
+# CRITICAL ANDROID 14-16 / KERNELSU-UMOUNT ARCHITECTURE:
+#   `FontManagerService` (system_server, NOT umounted) broadcasts the font paths
+#   from `font_fallback.xml` to ALL apps — including apps where KernelSU `umount`
+#   hides module-added files. If `font_fallback.xml` references a brand-new filename
+#   that doesn't exist in stock `/system/fonts/`, umounted apps (e.g. Gboard, banking)
+#   hit ENOENT -> nullptr -> SIGSEGV in `minikin::Font::prepareFont`.
+#
+#   CoreType solves this 100% by mapping its Dual-Optical SF Pro variable masters
+#   STRICTLY onto existing stock filenames discovered on the ROM:
+#     - CT_SLOT_TEXT  (Text opsz=17 Upright)  -> Roboto-Regular.ttf
+#     - CT_SLOT_DISP  (Display opsz=28 Upright)-> RobotoStatic-Regular.ttf / Roboto-Bold.ttf / Roboto-Regular.ttf
+#     - CT_SLOT_ITAL  (Text opsz=17 Italic)   -> Roboto-Italic.ttf / RobotoFlex-Regular.ttf / Roboto-Regular.ttf
+#     - CT_SLOT_DITAL (Display opsz=28 Italic)-> Roboto-BoldItalic.ttf / $CT_SLOT_ITAL
+#
+#   Result: Mounted processes get 100% true Dual-Optical SF Pro (Display + Text + Italic),
+#   while KernelSU-umounted apps fall back seamlessly to stock files with ZERO crashes.
 
-# Usage: ct_emit_font_entry <weight> <normal|italic> <text|display> <wdth> <use_psname:0|1>
+# Discover existing stock font slots inside <sys_fonts_dir> (default: /system/fonts)
+# Sets: CT_SLOT_TEXT, CT_SLOT_DISP, CT_SLOT_ITAL, CT_SLOT_DITAL
+ct_resolve_stock_slots() {
+    _sdir="${1:-/system/fonts}"
+
+    CT_SLOT_TEXT="Roboto-Regular.ttf"
+
+    if [ -e "$_sdir/RobotoStatic-Regular.ttf" ]; then
+        CT_SLOT_DISP="RobotoStatic-Regular.ttf"
+    elif [ -e "$_sdir/Roboto-Bold.ttf" ]; then
+        CT_SLOT_DISP="Roboto-Bold.ttf"
+    else
+        CT_SLOT_DISP="$CT_SLOT_TEXT"
+    fi
+
+    if [ -e "$_sdir/Roboto-Italic.ttf" ]; then
+        CT_SLOT_ITAL="Roboto-Italic.ttf"
+    elif [ -e "$_sdir/RobotoFlex-Regular.ttf" ]; then
+        CT_SLOT_ITAL="RobotoFlex-Regular.ttf"
+    else
+        CT_SLOT_ITAL="$CT_SLOT_TEXT"
+    fi
+
+    if [ -e "$_sdir/Roboto-BoldItalic.ttf" ]; then
+        CT_SLOT_DITAL="Roboto-BoldItalic.ttf"
+    else
+        CT_SLOT_DITAL="$CT_SLOT_ITAL"
+    fi
+}
+
+ct_save_slots() {
+    ct_init_dirs
+    _sf="$CT_DATA_DIR/slots.conf"
+    {
+        printf 'CT_SLOT_TEXT=%s\n' "$CT_SLOT_TEXT"
+        printf 'CT_SLOT_DISP=%s\n' "$CT_SLOT_DISP"
+        printf 'CT_SLOT_ITAL=%s\n' "$CT_SLOT_ITAL"
+        printf 'CT_SLOT_DITAL=%s\n' "$CT_SLOT_DITAL"
+    } > "$_sf.tmp.$$" && mv "$_sf.tmp.$$" "$_sf"
+}
+
+ct_load_slots() {
+    _sf="$CT_DATA_DIR/slots.conf"
+    if [ -r "$_sf" ]; then
+        CT_SLOT_TEXT=$(awk -F= '$1=="CT_SLOT_TEXT"{print $2;exit}' "$_sf")
+        CT_SLOT_DISP=$(awk -F= '$1=="CT_SLOT_DISP"{print $2;exit}' "$_sf")
+        CT_SLOT_ITAL=$(awk -F= '$1=="CT_SLOT_ITAL"{print $2;exit}' "$_sf")
+        CT_SLOT_DITAL=$(awk -F= '$1=="CT_SLOT_DITAL"{print $2;exit}' "$_sf")
+    fi
+    [ -n "${CT_SLOT_TEXT:-}" ] || ct_resolve_stock_slots "/system/fonts"
+}
+
+# Usage: ct_emit_font_entry <weight> <normal|italic> <text|display> <wdth>
 ct_emit_font_entry() {
     _w="$1"
     _style="$2"
     _optical="$3"
     _wdth="$4"
-    _use_ps="$5"
 
     if [ "$_optical" = "display" ]; then
         if [ "$_style" = "italic" ]; then
-            _file="CoreType-SFPro-Display-Italic.ttf"
-            _ps="CoreTypeSFProDisplay-Italic"
+            _file="$CT_SLOT_DITAL"
         else
-            _file="CoreType-SFPro-Display.ttf"
-            _ps="CoreTypeSFProDisplay-Regular"
+            _file="$CT_SLOT_DISP"
         fi
     else
         if [ "$_style" = "italic" ]; then
-            _file="CoreType-SFPro-Text-Italic.ttf"
-            _ps="CoreTypeSFProText-Italic"
+            _file="$CT_SLOT_ITAL"
         else
-            _file="CoreType-SFPro-Text.ttf"
-            _ps="CoreTypeSFProText-Regular"
+            _file="$CT_SLOT_TEXT"
         fi
     fi
 
-    if [ "$_use_ps" = "1" ]; then
-        printf '        <font weight="%s" style="%s" postScriptName="%s">%s\n' "$_w" "$_style" "$_ps" "$_file"
-    else
-        printf '        <font weight="%s" style="%s">%s\n' "$_w" "$_style" "$_file"
-    fi
+    printf '        <font weight="%s" style="%s">%s\n' "$_w" "$_style" "$_file"
     printf '            <axis tag="wght" stylevalue="%s" />\n' "$_w"
     if [ "$_style" = "normal" ]; then
         printf '            <axis tag="wdth" stylevalue="%s" />\n' "$_wdth"
@@ -44,63 +101,61 @@ ct_emit_font_entry() {
 
 ct_emit_sans_serif_block() {
     _open_tag="$1"
-    _use_ps="$2"
+    printf '    <!-- CoreType Dual-Optical -->\n'
     printf '    %s\n' "$_open_tag"
-    # Thin / Light (Lockscreen Clocks & Display Hero) -> True SF Pro Display (opsz=28 + Display trak)
-    ct_emit_font_entry 100 normal display "$CT_WDTH_DISP" "$_use_ps"
-    ct_emit_font_entry 100 italic display "$CT_WDTH_DISP" "$_use_ps"
-    ct_emit_font_entry 200 normal display "$CT_WDTH_DISP" "$_use_ps"
-    ct_emit_font_entry 200 italic display "$CT_WDTH_DISP" "$_use_ps"
-    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP" "$_use_ps"
-    ct_emit_font_entry 300 italic display "$CT_WDTH_DISP" "$_use_ps"
-    # Body / Chat / Notifications / UI Labels -> True SF Pro Text (opsz=17 + Text trak)
-    ct_emit_font_entry 350 normal text "$CT_WDTH_TEXT" "$_use_ps"
-    ct_emit_font_entry 400 normal text "$CT_WDTH_TEXT" "$_use_ps"
-    ct_emit_font_entry 400 italic text "$CT_WDTH_TEXT" "$_use_ps"
-    ct_emit_font_entry 500 normal text "$CT_WDTH_MID" "$_use_ps"
-    ct_emit_font_entry 500 italic text "$CT_WDTH_MID" "$_use_ps"
-    # Headers / Settings Titles / App Bars / Bold -> True SF Pro Display (opsz=28 + Display trak)
-    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP" "$_use_ps"
-    ct_emit_font_entry 600 italic display "$CT_WDTH_DISP" "$_use_ps"
-    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP" "$_use_ps"
-    ct_emit_font_entry 700 italic display "$CT_WDTH_DISP" "$_use_ps"
-    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP" "$_use_ps"
-    ct_emit_font_entry 800 italic display "$CT_WDTH_DISP" "$_use_ps"
-    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP" "$_use_ps"
-    ct_emit_font_entry 900 italic display "$CT_WDTH_DISP" "$_use_ps"
-    ct_emit_font_entry 950 normal display "$CT_WDTH_DISP" "$_use_ps"
+    # Thin / Light (Lockscreen Clocks & Display Hero) -> SF Pro Display (opsz=28 + Display trak)
+    ct_emit_font_entry 100 normal display "$CT_WDTH_DISP"
+    ct_emit_font_entry 100 italic display "$CT_WDTH_DISP"
+    ct_emit_font_entry 200 normal display "$CT_WDTH_DISP"
+    ct_emit_font_entry 200 italic display "$CT_WDTH_DISP"
+    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP"
+    ct_emit_font_entry 300 italic display "$CT_WDTH_DISP"
+    # Body / Chat / Notifications / UI Labels -> SF Pro Text (opsz=17 + Text trak)
+    ct_emit_font_entry 350 normal text "$CT_WDTH_TEXT"
+    ct_emit_font_entry 400 normal text "$CT_WDTH_TEXT"
+    ct_emit_font_entry 400 italic text "$CT_WDTH_TEXT"
+    ct_emit_font_entry 500 normal text "$CT_WDTH_MID"
+    ct_emit_font_entry 500 italic text "$CT_WDTH_MID"
+    # Headers / Settings Titles / App Bars / Bold -> SF Pro Display (opsz=28 + Display trak)
+    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP"
+    ct_emit_font_entry 600 italic display "$CT_WDTH_DISP"
+    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP"
+    ct_emit_font_entry 700 italic display "$CT_WDTH_DISP"
+    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP"
+    ct_emit_font_entry 800 italic display "$CT_WDTH_DISP"
+    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP"
+    ct_emit_font_entry 900 italic display "$CT_WDTH_DISP"
+    ct_emit_font_entry 950 normal display "$CT_WDTH_DISP"
     printf '    </family>\n'
 }
 
 ct_emit_condensed_block() {
     _open_tag="$1"
-    _use_ps="$2"
     printf '    %s\n' "$_open_tag"
-    ct_emit_font_entry 300 normal display "$CT_WDTH_COND" "$_use_ps"
-    ct_emit_font_entry 400 normal text "$CT_WDTH_COND" "$_use_ps"
-    ct_emit_font_entry 400 italic text "$CT_WDTH_COND" "$_use_ps"
-    ct_emit_font_entry 500 normal text "$CT_WDTH_COND" "$_use_ps"
-    ct_emit_font_entry 600 normal display "$CT_WDTH_COND" "$_use_ps"
-    ct_emit_font_entry 700 normal display "$CT_WDTH_COND" "$_use_ps"
-    ct_emit_font_entry 700 italic display "$CT_WDTH_COND" "$_use_ps"
+    ct_emit_font_entry 300 normal display "$CT_WDTH_COND"
+    ct_emit_font_entry 400 normal text "$CT_WDTH_COND"
+    ct_emit_font_entry 400 italic text "$CT_WDTH_COND"
+    ct_emit_font_entry 500 normal text "$CT_WDTH_COND"
+    ct_emit_font_entry 600 normal display "$CT_WDTH_COND"
+    ct_emit_font_entry 700 normal display "$CT_WDTH_COND"
+    ct_emit_font_entry 700 italic display "$CT_WDTH_COND"
     printf '    </family>\n'
 }
 
 ct_emit_display_block() {
     _open_tag="$1"
-    _use_ps="$2"
     printf '    %s\n' "$_open_tag"
-    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP" "$_use_ps"
-    ct_emit_font_entry 400 normal display "$CT_WDTH_DISP" "$_use_ps"
-    ct_emit_font_entry 500 normal display "$CT_WDTH_DISP" "$_use_ps"
-    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP" "$_use_ps"
-    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP" "$_use_ps"
-    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP" "$_use_ps"
-    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP" "$_use_ps"
+    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP"
+    ct_emit_font_entry 400 normal display "$CT_WDTH_DISP"
+    ct_emit_font_entry 500 normal display "$CT_WDTH_DISP"
+    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP"
+    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP"
+    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP"
+    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP"
     printf '    </family>\n'
 }
 
-# Structural XML sanity check (prevents malformed XML from ever reaching Zygote)
+# Structural XML sanity check (prevents malformed XML or missing slot files from reaching Zygote)
 # Usage: ct_validate_font_xml <xml_path> [fonts_dir]
 ct_validate_font_xml() {
     _xml="$1"
@@ -109,8 +164,12 @@ ct_validate_font_xml() {
     [ -s "$_xml" ] || return 1
     grep -q '<familyset' "$_xml" || return 1
     grep -q '</familyset>' "$_xml" || return 1
-    grep -q 'CoreType-SFPro-Text\.ttf' "$_xml" || return 1
-    grep -q 'CoreType-SFPro-Display\.ttf' "$_xml" || return 1
+    grep -q 'CoreType Dual-Optical' "$_xml" || return 1
+
+    # Zero-crash guarantee: NEVER allow non-stock CoreType-SFPro-*.ttf filenames in XML
+    if grep -q 'CoreType-SFPro' "$_xml"; then
+        return 1
+    fi
 
     # Verify balanced <family> and <font> open/close counts (ignoring XML comments)
     if ! awk '
@@ -157,11 +216,7 @@ ct_validate_font_xml() {
     fi
 
     if [ -n "$_fdir" ]; then
-        for _req in \
-            CoreType-SFPro-Text.ttf \
-            CoreType-SFPro-Text-Italic.ttf \
-            CoreType-SFPro-Display.ttf \
-            CoreType-SFPro-Display-Italic.ttf; do
+        for _req in "$CT_SLOT_TEXT" "$CT_SLOT_DISP" "$CT_SLOT_ITAL" "$CT_SLOT_DITAL"; do
             [ -s "$_fdir/$_req" ] || return 1
         done
     fi
@@ -178,20 +233,9 @@ ct_patch_font_xml() {
 
     [ -r "$_src" ] || return 1
     ct_load_profile "$_prof"
+    [ -n "${CT_SLOT_TEXT:-}" ] || ct_resolve_stock_slots "/system/fonts"
 
     mkdir -p "$(dirname "$_dst")" || return 1
-
-    # Match target schema: Android 14-16 font_fallback.xml supports postScriptName;
-    # legacy fonts.xml (<familyset version="22">) omits postScriptName cleanly.
-    _use_ps="0"
-    case "$(basename "$_dst")" in
-        *font_fallback.xml) _use_ps="1" ;;
-        *)
-            if grep -q 'postScriptName=' "$_src" 2>/dev/null; then
-                _use_ps="1"
-            fi
-            ;;
-    esac
 
     _sans_file="$_dst.sans.$$"
     _latin_file="$_dst.latin.$$"
@@ -200,11 +244,11 @@ ct_patch_font_xml() {
     _flex_file="$_dst.flex.$$"
     _tmp_out="$_dst.tmp.$$"
 
-    ct_emit_sans_serif_block '<family name="sans-serif">' "$_use_ps" > "$_sans_file"
-    ct_emit_sans_serif_block '<family>' "$_use_ps" > "$_latin_file"
-    ct_emit_condensed_block '<family name="sans-serif-condensed">' "$_use_ps" > "$_cond_file"
-    ct_emit_display_block '<family name="sans-serif-display">' "$_use_ps" > "$_disp_file"
-    ct_emit_sans_serif_block '<family name="roboto-flex">' "$_use_ps" > "$_flex_file"
+    ct_emit_sans_serif_block '<family name="sans-serif">' > "$_sans_file"
+    ct_emit_sans_serif_block '<family>' > "$_latin_file"
+    ct_emit_condensed_block '<family name="sans-serif-condensed">' > "$_cond_file"
+    ct_emit_display_block '<family name="sans-serif-display">' > "$_disp_file"
+    ct_emit_sans_serif_block '<family name="roboto-flex">' > "$_flex_file"
 
     awk -v sans_f="$_sans_file" \
         -v latin_f="$_latin_file" \

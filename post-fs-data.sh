@@ -34,16 +34,13 @@ fi
 
 printf '%s\n' "$((_attempts + 1))" > "$BOOT_FILE" 2>/dev/null || true
 
-# 2. Pre-Zygote font binary integrity check
-for _req in \
-    CoreType-SFPro-Text.ttf \
-    CoreType-SFPro-Text-Italic.ttf \
-    CoreType-SFPro-Display.ttf \
-    CoreType-SFPro-Display-Italic.ttf; do
+# 2. Pre-Zygote stock-slot binary integrity check
+ct_load_slots
+for _req in "$CT_SLOT_TEXT" "$CT_SLOT_DISP" "$CT_SLOT_ITAL" "$CT_SLOT_DITAL"; do
     if [ ! -s "$MODDIR/system/fonts/$_req" ]; then
         touch "$MODDIR/disable" 2>/dev/null || true
         ct_state_set "status" "safe_disabled"
-        ct_log "SAFE_MODE: missing $_req before boot, auto-disabled module"
+        ct_log "SAFE_MODE: missing slot $_req before boot, auto-disabled module"
         exit 0
     fi
 done
