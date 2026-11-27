@@ -157,7 +157,7 @@ jobs:
           LITE_SZ=$(du -h "$LITE_ZIP" | awk '{print $1}')
 
           cat > /tmp/release_notes.md <<EOF
-          **CoreType ${TAG}** — Native Apple CoreText-Parity San Francisco Pro (iOS 27.x) & Apple iOS 26.4 Color Emoji engine exclusively engineered for **HyperOS 1 / 2 / 3 / 4 & Android 12–17 (ARM64)** (**Zero LSPosed**, Magisk / KernelSU / KernelSU-Next / APatch).
+          **CoreType ${TAG}** — Native Apple CoreText-Parity San Francisco Pro (iOS 27.x) & Apple iOS 26.4 Color Emoji engine exclusively engineered for **HyperOS 1 / 2 / 3 / 4 & Android 12–17 (ARM64)** (Magisk / KernelSU / KernelSU-Next / APatch).
 
           ---
 

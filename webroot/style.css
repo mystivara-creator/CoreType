@@ -121,6 +121,7 @@ body.reduced-glass .glass-surface {
 .interactive-glow {
   position: relative;
   overflow: hidden;
+  touch-action: manipulation;
   transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.16s ease, box-shadow 0.16s ease;
 }
 
@@ -297,6 +298,7 @@ body.reduced-glass .glass-surface {
   border-radius: 16px;
   box-shadow: var(--card-shadow);
   overflow: hidden;
+  contain: layout style;
 }
 
 .ios-sep {
