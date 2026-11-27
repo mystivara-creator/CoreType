@@ -228,6 +228,13 @@ def bake_gpos_tracking(font: TTFont, track_units: int, space_track: int) -> int:
             if gcls == 3:
                 mark_glyphs.add(gname)
 
+    # Identify ASCII digit glyphs (including tnum/proportional alternates like zero.tf..nine.tf)
+    # so narrow UI pills (e.g. battery "100", clocks "00:00") never suffer cramped "00" spacing.
+    digit_prefixes = (
+        "zero", "one", "two", "three", "four",
+        "five", "six", "seven", "eight", "nine",
+    )
+
     adjustments = []
     for gname in glyph_order:
         if gname == ".notdef" or gname in mark_glyphs:
@@ -242,7 +249,14 @@ def bake_gpos_tracking(font: TTFont, track_units: int, space_track: int) -> int:
             if cat in ("Mn", "Me", "Cf", "Cc"):
                 continue
 
-        if cp in (0x0020, 0x00A0):
+        is_digit = (cp is not None and 0x0030 <= cp <= 0x0039) or gname.split(".")[0] in digit_prefixes
+        if is_digit:
+            # Keep Display digits at pure Apple spacing (0 UPM); gentle -8 UPM on Text digits
+            if track_units > -35:
+                continue
+            delta = -8
+            x_place = -4
+        elif cp in (0x0020, 0x00A0):
             delta = space_track
             x_place = 0
         elif aw <= 450:
