@@ -3,9 +3,13 @@ name: Build CoreType Module
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build-and-test:
@@ -97,3 +101,51 @@ jobs:
         with:
           name: CoreType-Full-Zip
           path: dist/CoreType-*-Full.zip
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          FULL_ZIP="dist/CoreType-${TAG}-Full.zip"
+          LITE_ZIP="dist/CoreType-${TAG}-Lite.zip"
+          FULL_SHA=$(sha256sum "$FULL_ZIP" | awk '{print $1}')
+          LITE_SHA=$(sha256sum "$LITE_ZIP" | awk '{print $1}')
+          FULL_SZ=$(du -h "$FULL_ZIP" | awk '{print $1}')
+          LITE_SZ=$(du -h "$LITE_ZIP" | awk '{print $1}')
+
+          cat > /tmp/release_notes.md <<EOF
+          **CoreType ${TAG}** — Standalone Dual-Optical San Francisco Pro (iOS 27.x) & Apple iOS 26.4 Color Emoji engine for **HyperOS 1 / 2 / 3 / 4 & Android 12–16** (**Zero LSPosed**, Magisk / KernelSU / KernelSU-Next / APatch).
+
+          ---
+
+          ### Editions
+          | Edition | File | Size | SHA-256 |
+          | :--- | :--- | :---: | :--- |
+          | **Full** *(SF Pro + MiSans Slider + Apple iOS 26.4 Emoji)* | \`CoreType-${TAG}-Full.zip\` | ~${FULL_SZ} | \`${FULL_SHA}\` |
+          | **Lite** *(Dual-Optical SF Pro + MiSans Slider only)* | \`CoreType-${TAG}-Lite.zip\` | ~${LITE_SZ} | \`${LITE_SHA}\` |
+
+          ---
+
+          ### Highlights
+          - **Dual-Optical Apple SF Pro Pipeline (iOS 27.x):** Separate Variable Font masters for **SF Pro Text** (\`opsz=17\`, \`−46\` UPM GPOS tracking) and **SF Pro Display** (\`opsz=28\`, \`−26\` UPM GPOS tracking), pure \`0\` UPM digit spacing for crisp status bar & battery badges (\`100\`), centered \`09:41\` clock colon (\`calt\`), and full non-PUA Unicode preservation (including Phonetic Extensions superscripts).
+          - **Universal HyperOS 1–4 \`MiSans\` + Live Font Weight Slider:** Auto-detects a safe separate CJK fallback (\`MiSansTCVF.ttf\`, \`MiSansL3.otf\`, or \`NotoSansCJK-Regular.ttc\`) so both **\`Default\`** and **\`MiSans\`** (with live weight slider) render SF Pro with zero CJK tofu boxes.
+          - **Harmonized HyperOS Weight Curve:** Calibrated \`mipro-normal\` (\`350 → 400\` for crisp Notes editor body), \`500 → 485\`, \`600 → 535\`, \`700 → 550\`, \`800 → 650\`, \`900 → 740\` for seamless visual balance across Settings, Notes, and SystemUI.
+          - **Apple iOS 26.4 Color Emoji Engine (Full Edition):** Android-native CBDT/CBLC Apple Emoji with non-destructive read-only bind-mounting over both \`/data/fonts/files/\` and GMS \`FontsProvider\` / Jetpack \`EmojiCompat\` caches (\`Noto_COLR_Emoji_Compat\` & \`No_Flags\`), plus an instant **WebUI ON/OFF toggle**.
+          - **KernelSU-Umount-Safe, OTA-Aware & Zero-Daemon:** 100% Stock-Slot mapping (zero \`minikin\` crashes in umounted banking apps), automatic \`ro.build.fingerprint\` OTA resync, Self-Healing Bootloop Guard (2-boot safety), and 0 KB persistent RAM.
+
+          ---
+
+          ### KernelSU / KernelSU-Next Note
+          - Keep **\`Umount modules\`** **OFF** for everyday apps where you want SF Pro & Apple iOS Emoji (e.g., set global \`Umount modules\` to **OFF** while leaving \`Superuser\` **OFF**), and enable \`Custom → Umount modules = ON\` specifically for banking / e-wallet apps.
+          - If Gboard retains old Google emoji previews on first boot, clear **Gboard cache** once (not data).
+          EOF
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$FULL_ZIP" "$LITE_ZIP" --clobber
+          else
+            gh release create "$TAG" "$FULL_ZIP" "$LITE_ZIP" \
+              --title "CoreType ${TAG} — Dual-Optical SF Pro & iOS 26.4 Emoji" \
+              --notes-file /tmp/release_notes.md
+          fi
