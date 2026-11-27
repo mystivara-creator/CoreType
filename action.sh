@@ -111,34 +111,6 @@ ct_export_diag() {
                     "$_xml" "$_has_ct" "$_has_opsz" "$_has_bad"
             fi
         done
-
-        printf '\n=== XIAOMI SYSTEM & APP FONT AUDIT (READ-ONLY) ===\n'
-        for _fdir in /system/fonts /product/fonts /system_ext/fonts /data/system/theme/fonts; do
-            if [ -d "$_fdir" ]; then
-                for _mf in "$_fdir"/Mi* "$_fdir"/mi* "$_fdir"/Hyper*; do
-                    [ -e "$_mf" ] || continue
-                    _msz=$(wc -c < "$_mf" 2>/dev/null || echo 0)
-                    printf 'sys: %s (%s bytes)\n' "$_mf" "$_msz"
-                done
-            fi
-        done
-        for _pkg in \
-            com.mi.globalminusscreen \
-            com.miui.personalassistant \
-            com.xiaomi.mipicks \
-            com.android.browser \
-            com.mi.globalbrowser \
-            com.android.thememanager; do
-            _pdir="/data/data/$_pkg"
-            if [ -d "$_pdir" ]; then
-                _found=$(find "$_pdir" -maxdepth 5 -type f \( -name '*.ttf' -o -name '*.otf' -o -name '*.ttc' \) 2>/dev/null | head -n 20)
-                if [ -n "$_found" ]; then
-                    printf 'app[%s]:\n%s\n' "$_pkg" "$_found"
-                else
-                    printf 'app[%s]: (no cached .ttf/.otf)\n' "$_pkg"
-                fi
-            fi
-        done
     } > "$_out.tmp.$$" && mv "$_out.tmp.$$" "$_out"
 
     chmod 0644 "$_out" 2>/dev/null || true
