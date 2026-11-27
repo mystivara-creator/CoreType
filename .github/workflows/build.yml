@@ -75,14 +75,16 @@ jobs:
           for df in ("fonts/CoreType-SFPro-Display.ttf", "fonts/CoreType-SFPro-Flex.ttf"):
               d_100 = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", df, "100"], text=True))
               assert all(g["dx"] == 0 for g in d_100), f"Unexpected negative tracking on digits in {df}: {d_100}"
-          flex_14 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=14,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
-          flex_32 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=32,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
-          w14 = sum(g["ax"] for g in flex_14)
-          w32 = sum(g["ax"] for g in flex_32)
-          assert w14 != w32, f"Flex continuous opsz axis had no visual advance delta ({w14} vs {w32})!"
+          flex_12 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=12,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
+          flex_22 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=22,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
+          flex_36 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=36,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
+          w12 = sum(g["ax"] for g in flex_12)
+          w22 = sum(g["ax"] for g in flex_22)
+          w36 = sum(g["ax"] for g in flex_36)
+          assert w12 != w22 and w22 != w36 and w12 != w36, f"Flex continuous opsz axis had no visual advance delta ({w12} / {w22} / {w36})!"
           s_jdm = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Text.ttf", "Yanz 25 \u02b2\u1d48\u1d50"], text=True))
           assert all(g["g"] != ".notdef" for g in s_jdm), f"Missing superscript glyph in Phonetic Extensions: {s_jdm}"
-          print(f"[PASS] HarfBuzz GPOS tracking, Flex continuous opsz (14:{w14} vs 32:{w32}), pure digit spacing (100), Phonetic Extensions (jdm) & Apple calt colon verified ({c_text} -> {c_clock})")
+          print(f"[PASS] HarfBuzz GPOS tracking, Flex continuous opsz (12:{w12} -> 22:{w22} -> 36:{w36}), pure digit spacing (100), Phonetic Extensions (jdm) & Apple calt colon verified ({c_text} -> {c_clock})")
           PY
 
       - name: Package CoreType Lite (SF Pro Only)

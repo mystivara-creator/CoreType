@@ -108,7 +108,7 @@ OPTICAL_SPECS = [
         "src": "SF-Pro.ttf",
         "out": "CoreType-SFPro-Flex.ttf",
         "is_italic": False,
-        "opsz": (12.0, 17.0, 36.0),
+        "opsz": (17.0, 17.0, 28.0),
         "default_wdth": 96.5,
         "track_units": -36,
         "space_track": -15,
@@ -494,14 +494,14 @@ def audit_built_fonts(out_dir: Path) -> None:
             axes = {a.axisTag: (a.minValue, a.defaultValue, a.maxValue) for a in font["fvar"].axes}
             assert "opsz" in axes, "CoreType-SFPro-Flex.ttf missing continuous opsz axis!"
             opsz_min, _opsz_def, opsz_max = axes["opsz"]
-            assert opsz_min <= 12.0 and opsz_max >= 36.0, (
-                f"Flex opsz range too narrow: {axes['opsz']} (expected 12..36)"
+            assert opsz_min <= 17.0 and opsz_max >= 28.0 and opsz_max > opsz_min, (
+                f"Flex opsz range invalid: {axes['opsz']} (expected continuous 17..28)"
             )
             assert "wght" in axes and "wdth" in axes, f"Flex missing wght/wdth axes: {axes}"
 
     print(
         f"[CoreType] Vertical metrics & optical axis audit PASSED "
-        f"(ascent={ANDROID_ASCENT}, descent={ANDROID_DESCENT}, ratio={(ANDROID_ASCENT - ANDROID_DESCENT)/2048.0:.4f}, Flex opsz=12..36)"
+        f"(ascent={ANDROID_ASCENT}, descent={ANDROID_DESCENT}, ratio={(ANDROID_ASCENT - ANDROID_DESCENT)/2048.0:.4f}, Flex opsz=17..28 [12..36sp CoreText clamp])"
     )
 
 
@@ -516,7 +516,7 @@ def self_test_specs() -> int:
     assert abs(ascent_share - 0.80) < 0.01, f"Ascent share {ascent_share:.4f} deviates from 4:1 CJK parity"
 
     flex_specs = [s for s in OPTICAL_SPECS if s["out"] == "CoreType-SFPro-Flex.ttf"]
-    assert len(flex_specs) == 1 and flex_specs[0]["opsz"] == (12.0, 17.0, 36.0), "Flex opsz must span 12..36"
+    assert len(flex_specs) == 1 and flex_specs[0]["opsz"] == (17.0, 17.0, 28.0), "Flex opsz must preserve Apple 17..28 domain"
     assert "tnum" in UI_LAYOUT_FEATURES and "calt" in UI_LAYOUT_FEATURES and "kern" in UI_LAYOUT_FEATURES
 
     # Verify Unicode preservation (Phonetic Extensions 'ʲᵈᵐ', Latin, digits) & PUA/Arabic exclusion
@@ -527,7 +527,7 @@ def self_test_specs() -> int:
 
     print(
         f"[PASS] build_fonts.py audit OK: metrics={ANDROID_ASCENT}/{ANDROID_DESCENT} "
-        f"(ratio={ratio:.4f}, ascent={ascent_share*100:.1f}%), Flex opsz=12..36, tnum+calt+Unicode verified"
+        f"(ratio={ratio:.4f}, ascent={ascent_share*100:.1f}%), Flex opsz=17..28, tnum+calt+Unicode verified"
     )
     return 0
 
