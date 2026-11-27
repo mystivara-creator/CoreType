@@ -56,6 +56,8 @@ ct_save_slots() {
         printf 'CT_SLOT_DISP=%s\n' "$CT_SLOT_DISP"
         printf 'CT_SLOT_ITAL=%s\n' "$CT_SLOT_ITAL"
         printf 'CT_SLOT_DITAL=%s\n' "$CT_SLOT_DITAL"
+        printf 'CT_CJK_FALLBACK=%s\n' "${CT_CJK_FALLBACK:-}"
+        printf 'CT_MISANS_SLIDER_ACTIVE=%s\n' "${CT_MISANS_SLIDER_ACTIVE:-0}"
     } > "$_sf.tmp.$$" && mv "$_sf.tmp.$$" "$_sf"
 }
 
@@ -66,8 +68,11 @@ ct_load_slots() {
         CT_SLOT_DISP=$(awk -F= '$1=="CT_SLOT_DISP"{print $2;exit}' "$_sf")
         CT_SLOT_ITAL=$(awk -F= '$1=="CT_SLOT_ITAL"{print $2;exit}' "$_sf")
         CT_SLOT_DITAL=$(awk -F= '$1=="CT_SLOT_DITAL"{print $2;exit}' "$_sf")
+        CT_CJK_FALLBACK=$(awk -F= '$1=="CT_CJK_FALLBACK"{print $2;exit}' "$_sf")
+        CT_MISANS_SLIDER_ACTIVE=$(awk -F= '$1=="CT_MISANS_SLIDER_ACTIVE"{print $2;exit}' "$_sf")
     fi
     [ -n "${CT_SLOT_TEXT:-}" ] || ct_resolve_stock_slots "/system/fonts"
+    [ -n "${CT_MISANS_SLIDER_ACTIVE:-}" ] || CT_MISANS_SLIDER_ACTIVE="0"
 }
 
 # Usage: ct_emit_font_entry <weight> <normal|italic> <text|display> <wdth> [wght_axis]
@@ -227,6 +232,27 @@ ct_validate_font_xml() {
     return 0
 }
 
+ct_emit_cjk_zh_hans_block() {
+    _cjk="$1"
+    printf '    <family lang="zh-Hans">\n'
+    case "$_cjk" in
+        *.ttc)
+            printf '        <font weight="400" style="normal" index="2">%s</font>\n' "$_cjk"
+            ;;
+        *VF.ttf)
+            for _cw in 100 200 300 400 500 600 700 800 900; do
+                printf '        <font weight="%s" style="normal">%s\n' "$_cw" "$_cjk"
+                printf '            <axis tag="wght" stylevalue="%s" />\n' "$_cw"
+                printf '        </font>\n'
+            done
+            ;;
+        *)
+            printf '        <font weight="400" style="normal">%s</font>\n' "$_cjk"
+            ;;
+    esac
+    printf '    </family>\n'
+}
+
 # Usage: ct_patch_font_xml <src_xml> <dst_xml> <profile_id> [fonts_dir]
 ct_patch_font_xml() {
     _src="$1"
@@ -245,6 +271,7 @@ ct_patch_font_xml() {
     _cond_file="$_dst.cond.$$"
     _disp_file="$_dst.disp.$$"
     _flex_file="$_dst.flex.$$"
+    _cjk_file="$_dst.cjk.$$"
     _tmp_out="$_dst.tmp.$$"
 
     ct_emit_sans_serif_block '<family name="sans-serif">' > "$_sans_file"
@@ -252,12 +279,21 @@ ct_patch_font_xml() {
     ct_emit_condensed_block '<family name="sans-serif-condensed">' > "$_cond_file"
     ct_emit_display_block '<family name="sans-serif-display">' > "$_disp_file"
     ct_emit_sans_serif_block '<family name="roboto-flex">' > "$_flex_file"
+    _cjk_redirect="0"
+    if [ "${CT_MISANS_SLIDER_ACTIVE:-0}" = "1" ] && [ -n "${CT_CJK_FALLBACK:-}" ]; then
+        ct_emit_cjk_zh_hans_block "$CT_CJK_FALLBACK" > "$_cjk_file"
+        _cjk_redirect="1"
+    else
+        : > "$_cjk_file"
+    fi
 
     awk -v sans_f="$_sans_file" \
         -v latin_f="$_latin_file" \
         -v cond_f="$_cond_file" \
         -v disp_f="$_disp_file" \
-        -v flex_f="$_flex_file" '
+        -v flex_f="$_flex_file" \
+        -v cjk_f="$_cjk_file" \
+        -v cjk_on="$_cjk_redirect" '
         function dump_file(path,    line) {
             while ((getline line < path) > 0) print line
             close(path)
@@ -287,12 +323,14 @@ ct_patch_font_xml() {
             else if ($0 ~ /name="sans-serif-condensed"/) fam_type = "cond"
             else if ($0 ~ /name="sans-serif-display"/) fam_type = "disp"
             else if ($0 ~ /name="roboto-flex"/) fam_type = "flex"
+            else if (cjk_on == "1" && $0 ~ /lang="zh-Hans"/) fam_type = "zh_hans"
             else if ($0 ~ /<family[ \t]*>/) fam_type = "unnamed"
             if ($0 ~ /<\/family>/) {
                 if (fam_type == "sans") dump_file(sans_f)
                 else if (fam_type == "cond") dump_file(cond_f)
                 else if (fam_type == "disp") dump_file(disp_f)
                 else if (fam_type == "flex") dump_file(flex_f)
+                else if (fam_type == "zh_hans" && fam_buf ~ /MiSansVF\.ttf|MiLanProVF\.ttf/) dump_file(cjk_f)
                 else printf "%s", fam_buf
                 in_fam = 0
                 fam_buf = ""
@@ -310,6 +348,8 @@ ct_patch_font_xml() {
                     dump_file(disp_f)
                 } else if (fam_type == "flex") {
                     dump_file(flex_f)
+                } else if (fam_type == "zh_hans" && (fam_buf ~ /MiSansVF\.ttf/ || fam_buf ~ /MiLanProVF\.ttf/)) {
+                    dump_file(cjk_f)
                 } else if (fam_type == "unnamed" && (fam_buf ~ /MiSansLatinVF\.ttf/ || fam_buf ~ /Roboto-Regular\.ttf/)) {
                     dump_file(latin_f)
                 } else {
@@ -323,7 +363,7 @@ ct_patch_font_xml() {
         { print }
     ' "$_src" > "$_tmp_out"
 
-    rm -f "$_sans_file" "$_latin_file" "$_cond_file" "$_disp_file" "$_flex_file"
+    rm -f "$_sans_file" "$_latin_file" "$_cond_file" "$_disp_file" "$_flex_file" "$_cjk_file"
 
     if ct_validate_font_xml "$_tmp_out" "$_fdir"; then
         mkdir -p "$(dirname "$_dst")"

@@ -12,7 +12,7 @@
       <div class="hero-top">
         <div>
           <h1>CoreType</h1>
-          <p class="subtitle">Dual-Optical SF Pro Typography Engine</p>
+          <p class="subtitle">Dual-Optical SF Pro &amp; iOS Emoji Engine</p>
         </div>
         <span id="status-badge" class="badge badge-muted">Checking…</span>
       </div>
@@ -26,11 +26,26 @@
       <p class="specimen-body">
         Headers &amp; clocks render with <strong>SF Pro Display</strong> (opsz 28, Apple Display tracking)
         while paragraphs &amp; chats render with <em>SF Pro Text</em> (opsz 17, Apple Text tracking) —
-        zero layout bloat on HyperOS &amp; Android.
+        zero layout bloat on HyperOS 1–4 &amp; Android 12–16.
       </p>
+      <div class="specimen-emoji">✨ 🔥 🥹 🫶🏻 🎧 🇮🇩</div>
       <div class="specimen-meta">
         <span>Text: wght 350–500 · opsz 17 · −46 trak</span>
         <span>Display: wght 100–300, 600–950 · opsz 28 · −26 trak</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-label">Apple iOS Emoji</div>
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <div class="profile-title" id="emoji-title">iOS 26.4 Color Emoji</div>
+          <p class="profile-desc" id="emoji-desc">GMS-aware Android CBDT/CBLC emoji with KernelSU-umount safety.</p>
+        </div>
+        <label class="switch" aria-label="Toggle Apple iOS Emoji">
+          <input type="checkbox" id="emoji-toggle" />
+          <span class="slider"></span>
+        </label>
       </div>
     </section>
 
@@ -60,7 +75,7 @@
         </button>
       </div>
       <div id="reboot-banner" class="banner hidden">
-        Profile saved. Reboot your device to apply the new optical curve.
+        Changes saved. Reboot your device to apply.
       </div>
     </section>
 
@@ -80,6 +95,14 @@
           <dd id="kv-slots">—</dd>
         </div>
         <div class="kv-row">
+          <dt>HyperOS MiSans Slider</dt>
+          <dd id="kv-misans">—</dd>
+        </div>
+        <div class="kv-row">
+          <dt>Apple iOS Emoji</dt>
+          <dd id="kv-emoji">—</dd>
+        </div>
+        <div class="kv-row">
           <dt>Active Font XML</dt>
           <dd id="kv-xml">—</dd>
         </div>
@@ -95,7 +118,7 @@
     </section>
 
     <footer class="footer">
-      CoreType v1.0.0 · Mystivara Ecosystem · Zero LSPosed
+      CoreType v1.1.0 · Mystivara Ecosystem · Zero LSPosed
     </footer>
   </main>
 
