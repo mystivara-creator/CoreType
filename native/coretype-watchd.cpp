@@ -195,11 +195,11 @@ std::string_view path_basename(std::string_view p) {
     return (slash == std::string_view::npos) ? p : p.substr(slash + 1);
 }
 
-int read_self_rss_kb() {
+int read_proc_status_kb(std::string_view label) {
     const std::string status = read_small_file("/proc/self/status");
-    size_t pos = status.find("VmRSS:");
+    size_t pos = status.find(label);
     if (pos == std::string::npos) return 0;
-    pos += 6;
+    pos += label.size();
     while (pos < status.size() && (status[pos] == ' ' || status[pos] == '\t')) ++pos;
     int kb = 0;
     while (pos < status.size() && status[pos] >= '0' && status[pos] <= '9') {
@@ -208,6 +208,9 @@ int read_self_rss_kb() {
     }
     return kb;
 }
+
+int read_self_rss_kb() { return read_proc_status_kb("VmRSS:"); }
+int read_self_private_kb() { return read_proc_status_kb("RssAnon:"); }
 
 void enter_global_mount_ns() {
     int fd = ::open("/proc/1/ns/mnt", O_RDONLY | O_CLOEXEC);
@@ -291,9 +294,9 @@ void prepare_font_source(const std::string& path) {
 bool is_latin_ui_gms_font(std::string_view base) {
     if (!ends_with(base, ".ttf")) return false;
     if (contains_ci(base, "emoji") || contains_ci(base, "mono") ||
-        contains_ci(base, "icon") || contains_ci(base, "symbol") ||
-        contains_ci(base, "serif") || contains_ci(base, "cjk") ||
-        contains_ci(base, "arabic")) {
+        contains_ci(base, "code") || contains_ci(base, "icon") ||
+        contains_ci(base, "symbol") || contains_ci(base, "serif") ||
+        contains_ci(base, "cjk") || contains_ci(base, "arabic")) {
         return false;
     }
     return starts_with(base, "Google_Sans") || starts_with(base, "GoogleSans") ||
@@ -333,6 +336,9 @@ std::string select_sfpro_source(const Config& cfg, std::string_view fname) {
     const std::string fdir = cfg.moddir + "/fonts/";
     const std::string f_text = fdir + "CoreType-SFPro-Text.ttf";
     const std::string f_disp = fdir + "CoreType-SFPro-Display.ttf";
+    const std::string f_flex = file_exists(fdir + "CoreType-SFPro-Flex.ttf")
+                                   ? (fdir + "CoreType-SFPro-Flex.ttf")
+                                   : f_text;
     const std::string f_ital = fdir + "CoreType-SFPro-Text-Italic.ttf";
     const std::string f_dital = file_exists(fdir + "CoreType-SFPro-Display-Italic.ttf")
                                     ? (fdir + "CoreType-SFPro-Display-Italic.ttf")
@@ -366,6 +372,7 @@ std::string select_sfpro_source(const Config& cfg, std::string_view fname) {
     }
     if (is_bold) return f_bold;
     if (is_medium) return f_med;
+    if (contains_ci(fname, "flex")) return f_flex;
     if (is_display_light) return f_disp;
     return f_text;
 }
@@ -470,6 +477,7 @@ SyncStats perform_sync(const Config& cfg) {
         prepare_font_source(fdir + "CoreType-SFPro-Text-Italic.ttf");
         prepare_font_source(fdir + "CoreType-SFPro-Display.ttf");
         prepare_font_source(fdir + "CoreType-SFPro-Display-Italic.ttf");
+        prepare_font_source(fdir + "CoreType-SFPro-Flex.ttf");
         prepare_font_source(fdir + "CoreType-SFPro-GMS-Medium.ttf");
         prepare_font_source(fdir + "CoreType-SFPro-GMS-Bold.ttf");
     }
@@ -648,11 +656,13 @@ private:
 void write_telemetry(const Config& cfg, const SyncStats& stats, uint64_t sync_count,
                      bool watch_healthy, uint64_t watch_recoveries) {
     const int rss_kb = read_self_rss_kb();
+    const int priv_kb = read_self_private_kb();
     std::string out;
-    out.reserve(384);
+    out.reserve(416);
     out += "daemon_mode=native-epoll\n";
     out += "daemon_pid=" + std::to_string(::getpid()) + "\n";
     out += "daemon_rss_kb=" + std::to_string(rss_kb) + "\n";
+    out += "daemon_private_kb=" + std::to_string(priv_kb) + "\n";
     out += "watch_health=" + std::string(watch_healthy ? "healthy" : "recovering") + "\n";
     out += "watch_recoveries=" + std::to_string(watch_recoveries) + "\n";
     out += "gms_latin_mounted=" + std::to_string(stats.gms_latin_mounted) + "\n";

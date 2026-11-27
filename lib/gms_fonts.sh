@@ -24,11 +24,13 @@ ct_gms_select_sfpro_source() {
 
     _f_text="$_moddir/fonts/CoreType-SFPro-Text.ttf"
     _f_disp="$_moddir/fonts/CoreType-SFPro-Display.ttf"
+    _f_flex="$_moddir/fonts/CoreType-SFPro-Flex.ttf"
     _f_ital="$_moddir/fonts/CoreType-SFPro-Text-Italic.ttf"
     _f_dital="$_moddir/fonts/CoreType-SFPro-Display-Italic.ttf"
     _f_med="$_moddir/fonts/CoreType-SFPro-GMS-Medium.ttf"
     _f_bold="$_moddir/fonts/CoreType-SFPro-GMS-Bold.ttf"
 
+    [ -f "$_f_flex" ] || _f_flex="$_f_text"
     [ -f "$_f_med" ] || _f_med="$_f_text"
     [ -f "$_f_bold" ] || _f_bold="$_f_disp"
     [ -f "$_f_dital" ] || _f_dital="$_f_ital"
@@ -64,6 +66,14 @@ ct_gms_select_sfpro_source() {
             ;;
     esac
 
+    # Match Material 3 Expressive continuous-opsz Flex variable font (Google_Sans_Flex-400*)
+    case "$_fname" in
+        *[Ff]lex*)
+            printf '%s\n' "$_f_flex"
+            return 0
+            ;;
+    esac
+
     # Match Display / Light / Thin (100..300)
     case "$_fname" in
         *[Dd]isplay*|*-100-*|*-200-*|*-300-*|*[Ll]ight*|*[Tt]hin*)
@@ -77,11 +87,11 @@ ct_gms_select_sfpro_source() {
     return 0
 }
 
-# Filter strictly to Latin UI fonts (never touch Emoji, Mono, Icons, Symbols, CJK, Arabic, Indic)
+# Filter strictly to Latin UI fonts (never touch Emoji, Mono, Code, Icons, Symbols, CJK, Arabic)
 ct_gms_is_latin_ui_font() {
     _base="$1"
     case "$_base" in
-        *[Ee]moji*|*[Mm]ono*|*[Ii]con*|*[Ss]ymbol*|*[Ss]erif*|*[Cc][Jj][Kk]*|*[Aa]rabic*)
+        *[Ee]moji*|*[Mm]ono*|*[Cc]ode*|*[Ii]con*|*[Ss]ymbol*|*[Ss]erif*|*[Cc][Jj][Kk]*|*[Aa]rabic*)
             return 1
             ;;
         Google_Sans*.ttf|GoogleSans*.ttf|Product_Sans*.ttf|ProductSans*.ttf|Roboto*.ttf|Inter*.ttf)
@@ -120,6 +130,7 @@ ct_bind_gms_latin_fonts() {
         "$_moddir/fonts/CoreType-SFPro-Text-Italic.ttf" \
         "$_moddir/fonts/CoreType-SFPro-Display.ttf" \
         "$_moddir/fonts/CoreType-SFPro-Display-Italic.ttf" \
+        "$_moddir/fonts/CoreType-SFPro-Flex.ttf" \
         "$_moddir/fonts/CoreType-SFPro-GMS-Medium.ttf" \
         "$_moddir/fonts/CoreType-SFPro-GMS-Bold.ttf"; do
         ct_gms_prepare_source "$_prep" || true

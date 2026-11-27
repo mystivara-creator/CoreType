@@ -99,8 +99,16 @@
     pill.className = "pill " + (mode === "native-epoll" ? "pill-live" : "");
 
     const rss = parseInt(tm.daemon_rss_kb || "0", 10);
-    document.getElementById("tm-rss").textContent = rss > 0 ? `${rss} KB` : "—";
-    document.getElementById("tm-pid").textContent = tm.daemon_pid ? `PID ${tm.daemon_pid}` : "Idle";
+    const priv = parseInt(tm.daemon_private_kb || "0", 10);
+    if (priv > 0) {
+      document.getElementById("tm-rss").textContent = `${priv} KB`;
+      const vmMb = rss > 0 ? ` · RSS ${(rss / 1024).toFixed(1)} MB` : "";
+      document.getElementById("tm-pid").textContent =
+        (tm.daemon_pid ? `PID ${tm.daemon_pid}` : "Private") + vmMb;
+    } else {
+      document.getElementById("tm-rss").textContent = rss > 0 ? `${rss} KB` : "—";
+      document.getElementById("tm-pid").textContent = tm.daemon_pid ? `PID ${tm.daemon_pid}` : "Idle";
+    }
 
     const health = tm.watch_health || (mode === "native-epoll" ? "healthy" : "idle");
     const rec = parseInt(tm.watch_recoveries || "0", 10);
@@ -200,9 +208,12 @@
         {
           daemon_mode: "native-epoll",
           daemon_pid: "4128",
-          daemon_rss_kb: "212",
+          daemon_private_kb: "212",
+          daemon_rss_kb: "2120",
+          watch_health: "healthy",
+          watch_recoveries: "0",
           gms_latin_mounted: "12",
-          gms_emoji_mounted: "3",
+          gms_emoji_mounted: "4",
           sync_count: "2",
           last_sync_latency_us: "840",
           active_text_tracking_upm: "-46",

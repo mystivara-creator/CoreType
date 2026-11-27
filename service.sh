@@ -126,6 +126,7 @@ ct_write_state() {
 ct_write_fallback_telemetry() {
     _sc="$1"
     _rss=$(awk '/^VmRSS:/{print $2;exit}' /proc/self/status 2>/dev/null || echo 0)
+    _priv=$(awk '/^RssAnon:/{print $2;exit}' /proc/self/status 2>/dev/null || echo 0)
     _wh="recovering"
     [ -d /data/data/com.google.android.gms/files/fonts/opentype ] && _wh="healthy"
     mkdir -p "$CT_RUN_DIR" 2>/dev/null || true
@@ -135,6 +136,7 @@ ct_write_fallback_telemetry() {
         printf 'daemon_mode=shell-fallback\n'
         printf 'daemon_pid=%s\n' "$$"
         printf 'daemon_rss_kb=%s\n' "${_rss:-0}"
+        printf 'daemon_private_kb=%s\n' "${_priv:-0}"
         printf 'watch_health=%s\n' "$_wh"
         printf 'watch_recoveries=0\n'
         printf 'gms_latin_mounted=%s\n' "${CT_GMS_FONTS_BOUND:-0}"

@@ -347,6 +347,7 @@ else
 fi
 
 # 5b. Universal GMS Latin font bind-mount routing (Play Store, Gmail, Maps, Photos, Gboard)
+{ printf '\000\001\000\000'; dd if=/dev/zero bs=1024 count=110 2>/dev/null; } > "$FAKE_MOD/fonts/CoreType-SFPro-Flex.ttf"
 { printf '\000\001\000\000'; dd if=/dev/zero bs=1024 count=110 2>/dev/null; } > "$FAKE_MOD/fonts/CoreType-SFPro-GMS-Medium.ttf"
 { printf '\000\001\000\000'; dd if=/dev/zero bs=1024 count=110 2>/dev/null; } > "$FAKE_MOD/fonts/CoreType-SFPro-GMS-Bold.ttf"
 MOCK_GMS_LATIN="$TMP_DIR/gms_latin"
@@ -357,6 +358,8 @@ for _gf in \
     Google_Sans_Text-500-100_0-0_0.ttf \
     Google_Sans-700-100_0-0_0.ttf \
     Google_Sans_Text-400-100_0-1_0.ttf \
+    Google_Sans_Flex-400-100_0-0_0.ttf \
+    Google_Sans_Code-400-100_0-0_0.ttf \
     Noto_COLR_Emoji_Compat-400-100_0-0_0.ttf \
     RobotoMono-400-100_0-0_0.ttf; do
     printf 'stock' > "$MOCK_GMS_LATIN/$_gf"
@@ -370,14 +373,16 @@ _gbound=$(
     ct_bind_gms_latin_fonts "$FAKE_MOD" "$MOCK_GMS_LATIN"
     printf '%s' "$CT_GMS_FONTS_BOUND"
 )
-if [ "$_gbound" = "4" ] \
+if [ "$_gbound" = "5" ] \
     && grep -q 'CoreType-SFPro-Text\.ttf.*Google_Sans_Text-400-100_0-0_0\.ttf' "$MOCK_GMS_LOG" \
     && grep -q 'CoreType-SFPro-GMS-Medium\.ttf.*Google_Sans_Text-500-100_0-0_0\.ttf' "$MOCK_GMS_LOG" \
     && grep -q 'CoreType-SFPro-GMS-Bold\.ttf.*Google_Sans-700-100_0-0_0\.ttf' "$MOCK_GMS_LOG" \
     && grep -q 'CoreType-SFPro-Text-Italic\.ttf.*Google_Sans_Text-400-100_0-1_0\.ttf' "$MOCK_GMS_LOG" \
+    && grep -q 'CoreType-SFPro-Flex\.ttf.*Google_Sans_Flex-400-100_0-0_0\.ttf' "$MOCK_GMS_LOG" \
+    && ! grep -q 'Google_Sans_Code' "$MOCK_GMS_LOG" \
     && ! grep -q 'Noto_COLR_Emoji' "$MOCK_GMS_LOG" \
     && ! grep -q 'RobotoMono' "$MOCK_GMS_LOG"; then
-    pass "Universal GMS Latin bind routed 400/500/700/Italic accurately (4/4) while skipping Emoji & Mono"
+    pass "Universal GMS Latin bind routed 400/500/700/Italic/Flex (5/5) while skipping Code, Emoji & Mono"
 else
     fail "Universal GMS Latin font routing failed (bound=$_gbound)"
 fi
@@ -424,6 +429,7 @@ if [ -n "$_cxx" ]; then
 
         if [ -s "$WD_RUN/telemetry.prop" ] \
             && grep -q '^daemon_mode=native-epoll$' "$WD_RUN/telemetry.prop" \
+            && grep -q '^daemon_private_kb=[0-9]' "$WD_RUN/telemetry.prop" \
             && grep -q '^watch_health=healthy$' "$WD_RUN/telemetry.prop" \
             && grep -q '^watch_recoveries=0$' "$WD_RUN/telemetry.prop" \
             && grep -q '^sync_count=1$' "$WD_RUN/telemetry.prop" \
