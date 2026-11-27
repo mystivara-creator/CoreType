@@ -61,7 +61,21 @@ ct_export_diag() {
 
         printf '\n=== ENGINE STATE (%s) ===\n' "$CT_STATE_FILE"
         if [ -r "$CT_STATE_FILE" ]; then
-            cat "$CT_STATE_FILE"
+            _live_gl=""
+            _live_ge=""
+            if [ -r "$TELEM_FILE" ]; then
+                _live_gl=$(awk -F= '$1=="gms_latin_mounted"{print $2;exit}' "$TELEM_FILE" 2>/dev/null || true)
+                _live_ge=$(awk -F= '$1=="gms_emoji_mounted"{print $2;exit}' "$TELEM_FILE" 2>/dev/null || true)
+            fi
+            if [ -n "$_live_gl" ] || [ -n "$_live_ge" ]; then
+                awk -F= -v gl="${_live_gl}" -v ge="${_live_ge}" '
+                    $1=="gms_fonts_bound" && gl!="" { print "gms_fonts_bound=" gl; next }
+                    $1=="gms_emoji_bound" && ge!="" { print "gms_emoji_bound=" ge; next }
+                    { print }
+                ' "$CT_STATE_FILE"
+            else
+                cat "$CT_STATE_FILE"
+            fi
         else
             printf '(state.prop unavailable)\n'
         fi
@@ -127,6 +141,8 @@ if [ -r "$PID_FILE" ]; then
         _gl=$(awk -F= '$1=="gms_latin_mounted"{print $2;exit}' "$TELEM_FILE" 2>/dev/null || echo 0)
         _ge=$(awk -F= '$1=="gms_emoji_mounted"{print $2;exit}' "$TELEM_FILE" 2>/dev/null || echo 0)
         _wh=$(awk -F= '$1=="watch_health"{print $2;exit}' "$TELEM_FILE" 2>/dev/null || echo "healthy")
+        ct_state_set "gms_fonts_bound" "${_gl:-0}" 2>/dev/null || true
+        ct_state_set "gms_emoji_bound" "${_ge:-0}" 2>/dev/null || true
         printf 'CoreType Native Sync (SIGUSR1): %s Latin, %s Emoji mounted in %s us (watch=%s).\n' \
             "${_gl:-0}" "${_ge:-0}" "${_lat:-0}" "${_wh:-healthy}"
         exit 0
