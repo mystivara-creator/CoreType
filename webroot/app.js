@@ -4,9 +4,17 @@
   const STATE_FILE = "/data/adb/coretype/state.prop";
   const CONF_FILE = "/data/adb/coretype/config.conf";
   const VALID_PROFILES = ["dynamic_optical", "native_pro", "compact_crisp"];
+  const VALID_CONTRASTS = ["soft", "balanced", "apple_native"];
 
   let appliedProfile = "dynamic_optical";
   let wantedProfile = "dynamic_optical";
+  let appliedBias = 0;
+  let wantedBias = 0;
+  let appliedContrast = "balanced";
+  let wantedContrast = "balanced";
+  let romCurve = "hyperos_mipro";
+  let appliedGmsFonts = "1";
+  let wantedGmsFonts = "1";
   let appliedEmoji = "1";
   let wantedEmoji = "1";
   let emojiAvailable = false;
@@ -37,14 +45,87 @@
     return map;
   }
 
+  function clampBias(val) {
+    const n = parseInt(val, 10);
+    if (Number.isNaN(n)) return 0;
+    return Math.max(-60, Math.min(80, n));
+  }
+
+  // Exact JS mirror of ct_calc_wght() in lib/font_xml.sh for live WebUI preview
+  function calcWght(slot, rom, contrast, bias) {
+    const bases =
+      rom === "aosp_linear"
+        ? { 200: 240, 400: 400, 500: 500, 600: 570, 700: 650, 800: 740 }
+        : { 200: 250, 400: 400, 500: 485, 600: 535, 700: 550, 800: 650 };
+    const base = bases[slot] || slot;
+
+    let cdelta = 0;
+    if (contrast === "soft") {
+      if (slot === 600) cdelta = -25;
+      else if (slot === 700) cdelta = -30;
+      else if (slot === 800) cdelta = -35;
+    } else if (contrast === "apple_native") {
+      if (slot === 600) cdelta = 25;
+      else if (slot === 700 || slot === 800) cdelta = 45;
+    }
+
+    let bdelta = bias;
+    if (slot === 200) bdelta = Math.trunc(bias / 2);
+    else if (slot === 800) bdelta = Math.trunc((bias * 3) / 4);
+
+    return Math.max(100, Math.min(950, base + cdelta + bdelta));
+  }
+
+  function biasLabel(bias) {
+    if (bias === 0) return "0 · Standard";
+    const sign = bias > 0 ? "+" : "";
+    const tag = bias < -20 ? "Airy" : bias < 0 ? "Light" : bias <= 30 ? "Crisp" : "Bold";
+    return `${sign}${bias} · ${tag}`;
+  }
+
+  function updateLiveSpecimen() {
+    const wClock = calcWght(200, romCurve, wantedContrast, wantedBias);
+    const wBody = calcWght(400, romCurve, wantedContrast, wantedBias);
+    const wMed = calcWght(500, romCurve, wantedContrast, wantedBias);
+    const wSub = calcWght(600, romCurve, wantedContrast, wantedBias);
+    const wHdr = calcWght(700, romCurve, wantedContrast, wantedBias);
+    const wBold = calcWght(800, romCurve, wantedContrast, wantedBias);
+
+    const setW = (id, w) => {
+      const el = document.getElementById(id);
+      if (el) el.style.fontVariationSettings = `"wght" ${w}`;
+    };
+    setW("specimen-clock", wClock);
+    setW("specimen-header", wHdr);
+    setW("specimen-subhead", wSub);
+    setW("specimen-body", wBody);
+
+    document.getElementById("specimen-meta-curve").textContent =
+      `Body ${wBody} · Med ${wMed} · Header ${wHdr} · Bold ${wBold}`;
+
+    document.getElementById("bias-value").textContent = biasLabel(wantedBias);
+    document.getElementById("bias-reset").classList.toggle("hidden", wantedBias === 0);
+  }
+
   function selectButton(profileId) {
     document.querySelectorAll(".profile-item").forEach((btn) => {
       btn.classList.toggle("selected", btn.dataset.profile === profileId);
     });
   }
 
+  function selectContrast(mode) {
+    document.querySelectorAll("#contrast-group .seg-btn").forEach((btn) => {
+      btn.classList.toggle("selected", btn.dataset.contrast === mode);
+    });
+  }
+
   function syncRebootBanner() {
-    const dirty = wantedProfile !== appliedProfile || (emojiAvailable && wantedEmoji !== appliedEmoji);
+    const dirty =
+      wantedProfile !== appliedProfile ||
+      wantedBias !== appliedBias ||
+      wantedContrast !== appliedContrast ||
+      wantedGmsFonts !== appliedGmsFonts ||
+      (emojiAvailable && wantedEmoji !== appliedEmoji);
     document.getElementById("reboot-banner").classList.toggle("hidden", !dirty);
   }
 
@@ -61,24 +142,27 @@
 
     const badge = document.getElementById("status-badge");
     const emojiToggle = document.getElementById("emoji-toggle");
+    const gmsToggle = document.getElementById("gms-fonts-toggle");
+    const biasSlider = document.getElementById("weight-bias-slider");
 
     if (stRes.code === -1) {
       badge.textContent = "Preview";
       badge.className = "badge badge-muted";
-      appliedProfile = "dynamic_optical";
-      wantedProfile = "dynamic_optical";
-      appliedEmoji = "1";
-      wantedEmoji = "1";
       emojiAvailable = true;
       emojiToggle.checked = true;
+      gmsToggle.checked = true;
+      biasSlider.value = "0";
       selectButton("dynamic_optical");
+      selectContrast("balanced");
+      updateLiveSpecimen();
       document.getElementById("kv-profile").textContent = "iOS Optical Dynamic";
+      document.getElementById("kv-curve").textContent = "HyperOS Auto · Bias 0 · Balanced";
+      document.getElementById("kv-gms-fonts").textContent = "Active (GMS Bound)";
       document.getElementById("kv-mounted").textContent = "Dual-Optical VF (Shared Inode)";
       document.getElementById("kv-slots").textContent = "Roboto · Static · Flex";
       document.getElementById("kv-misans").textContent = "Active (CJK: MiSansTCVF)";
-      document.getElementById("kv-emoji").textContent = "Active (Full Edition)";
+      document.getElementById("kv-emoji").textContent = "Active (iOS 26.4 · 3 GMS bound)";
       document.getElementById("kv-xml").textContent = "font_fallback.xml";
-      document.getElementById("kv-wdth").textContent = "96.5 / 97.0";
       document.getElementById("kv-guard").textContent = "Healthy · OTA Synced";
       return;
     }
@@ -93,6 +177,30 @@
     wantedProfile = cf.profile || st.profile || "dynamic_optical";
     appliedProfile = cf.applied_profile || st.profile || "dynamic_optical";
     selectButton(wantedProfile);
+
+    romCurve = st.rom_curve || cf.rom_curve || "hyperos_mipro";
+    wantedBias = clampBias(cf.weight_bias !== undefined ? cf.weight_bias : st.weight_bias);
+    appliedBias = clampBias(cf.applied_weight_bias !== undefined ? cf.applied_weight_bias : st.weight_bias);
+    wantedContrast = VALID_CONTRASTS.includes(cf.contrast_mode)
+      ? cf.contrast_mode
+      : (VALID_CONTRASTS.includes(st.contrast_mode) ? st.contrast_mode : "balanced");
+    appliedContrast = VALID_CONTRASTS.includes(cf.applied_contrast_mode)
+      ? cf.applied_contrast_mode
+      : (VALID_CONTRASTS.includes(st.contrast_mode) ? st.contrast_mode : "balanced");
+
+    biasSlider.value = String(wantedBias);
+    selectContrast(wantedContrast);
+    updateLiveSpecimen();
+
+    wantedGmsFonts = cf.gms_fonts_enabled === "0" ? "0" : "1";
+    appliedGmsFonts = cf.applied_gms_fonts === "0" ? "0" : (st.gms_fonts_enabled === "0" ? "0" : "1");
+    gmsToggle.checked = wantedGmsFonts === "1";
+
+    const gmsFontBound = parseInt(st.gms_fonts_bound || "0", 10);
+    document.getElementById("kv-gms-fonts").textContent =
+      appliedGmsFonts === "1"
+        ? (gmsFontBound > 0 ? `Active (${gmsFontBound} GMS bound)` : "Active (GMS-Aware)")
+        : "Disabled";
 
     emojiAvailable = st.emoji_available === "1";
     wantedEmoji = cf.emoji_enabled === "0" ? "0" : "1";
@@ -116,6 +224,11 @@
     }
 
     document.getElementById("kv-profile").textContent = st.profile_label || appliedProfile;
+    const romTag = romCurve === "aosp_linear" ? "AOSP Auto" : "HyperOS Auto";
+    const biasTxt = appliedBias > 0 ? `+${appliedBias}` : `${appliedBias}`;
+    const cLabel = st.contrast_label || (appliedContrast === "soft" ? "Soft" : appliedContrast === "apple_native" ? "Apple Native" : "Balanced");
+    document.getElementById("kv-curve").textContent = `${romTag} · Bias ${biasTxt} · ${cLabel}`;
+
     document.getElementById("kv-mounted").textContent =
       st.font_mounted === "1" ? "Dual-Optical VF (Shared Inode)" : "Not Mounted";
 
@@ -129,8 +242,6 @@
         : "AOSP / Preserved";
 
     document.getElementById("kv-xml").textContent = st.xml_active || "none";
-    document.getElementById("kv-wdth").textContent =
-      st.wdth_text && st.wdth_disp ? `${st.wdth_text} / ${st.wdth_disp}` : "—";
 
     const guardText = st.bootloop_guard === "healthy" ? "Healthy" : (st.bootloop_guard || "Armed");
     const otaText = st.ota_status === "resynced" ? "OTA Resynced" : "OTA Synced";
@@ -147,6 +258,29 @@
     syncRebootBanner();
   }
 
+  async function setWeightBias(val) {
+    wantedBias = clampBias(val);
+    document.getElementById("weight-bias-slider").value = String(wantedBias);
+    updateLiveSpecimen();
+    await writeConfKey("weight_bias", String(wantedBias));
+    syncRebootBanner();
+  }
+
+  async function setContrast(mode) {
+    if (!VALID_CONTRASTS.includes(mode)) return;
+    wantedContrast = mode;
+    selectContrast(mode);
+    updateLiveSpecimen();
+    await writeConfKey("contrast_mode", mode);
+    syncRebootBanner();
+  }
+
+  async function setGmsFonts(enabled) {
+    wantedGmsFonts = enabled ? "1" : "0";
+    await writeConfKey("gms_fonts_enabled", wantedGmsFonts);
+    syncRebootBanner();
+  }
+
   async function setEmoji(enabled) {
     if (!emojiAvailable) return;
     wantedEmoji = enabled ? "1" : "0";
@@ -156,6 +290,25 @@
 
   document.querySelectorAll(".profile-item").forEach((btn) => {
     btn.addEventListener("click", () => setProfile(btn.dataset.profile));
+  });
+
+  document.querySelectorAll("#contrast-group .seg-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setContrast(btn.dataset.contrast));
+  });
+
+  const biasSlider = document.getElementById("weight-bias-slider");
+  biasSlider.addEventListener("input", (ev) => {
+    wantedBias = clampBias(ev.target.value);
+    updateLiveSpecimen();
+  });
+  biasSlider.addEventListener("change", (ev) => {
+    setWeightBias(ev.target.value);
+  });
+
+  document.getElementById("bias-reset").addEventListener("click", () => setWeightBias(0));
+
+  document.getElementById("gms-fonts-toggle").addEventListener("change", (ev) => {
+    setGmsFonts(ev.target.checked);
   });
 
   document.getElementById("emoji-toggle").addEventListener("change", (ev) => {

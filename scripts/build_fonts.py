@@ -408,6 +408,47 @@ def build_optical_master(src_path: Path, out_path: Path, spec: dict) -> None:
     )
 
 
+GMS_STATIC_SPECS = [
+    {
+        "src_master": "CoreType-SFPro-Text.ttf",
+        "out": "CoreType-SFPro-GMS-Medium.ttf",
+        "coords": {"wght": 500.0, "wdth": 96.5},
+        "family": "CoreType SF Pro Text",
+        "subfamily": "Medium",
+        "ps_name": "CoreTypeSFProText-Medium",
+    },
+    {
+        "src_master": "CoreType-SFPro-Display.ttf",
+        "out": "CoreType-SFPro-GMS-Bold.ttf",
+        "coords": {"wght": 600.0, "wdth": 97.0},
+        "family": "CoreType SF Pro Display",
+        "subfamily": "Semibold",
+        "ps_name": "CoreTypeSFProDisplay-Semibold",
+    },
+]
+
+
+def build_gms_static_instances(out_dir: Path) -> None:
+    """
+    Build two ultra-lean static SF Pro instances (~250 KB each) from our already-calibrated
+    Variable Masters so static GMS FontsProvider targets (Google_Sans_Text-500, Google_Sans-700,
+    etc. in Play Store, Gmail, Maps, Photos, Gboard) render genuine Apple Medium/Semibold weight
+    instead of falling back to flat Regular (400) or synthetic Skia faux-bold.
+    """
+    for spec in GMS_STATIC_SPECS:
+        src_path = out_dir / spec["src_master"]
+        dst_path = out_dir / spec["out"]
+        font = TTFont(str(src_path))
+        font = instantiateVariableFont(font, spec["coords"], inplace=True)
+        set_name_records(font, spec["family"], spec["subfamily"], spec["ps_name"])
+        font.save(str(dst_path))
+        size_kb = dst_path.stat().st_size / 1024.0
+        print(
+            f"[CoreType] Built GMS static instance {dst_path.name} ({size_kb:.1f} KB) | "
+            f"coords={spec['coords']}"
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build CoreType dual-optical SF Pro variable fonts.")
     parser.add_argument("--src-fonts-dir", type=Path, help="Path to already-extracted Apple Library/Fonts directory")
@@ -435,7 +476,9 @@ def main() -> int:
                 spec,
             )
 
-        print("[CoreType] All 4 optical SF Pro variable masters built & verified!")
+        build_gms_static_instances(args.out_dir)
+
+        print("[CoreType] All 4 optical SF Pro variable masters + 2 GMS static instances built & verified!")
         return 0
     finally:
         if tmp_dir and tmp_dir.exists():

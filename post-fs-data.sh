@@ -14,6 +14,8 @@ MODDIR="${0%/*}"
 . "$MODDIR/lib/engine.sh"
 # shellcheck disable=SC1091
 . "$MODDIR/lib/emoji.sh"
+# shellcheck disable=SC1091
+. "$MODDIR/lib/gms_fonts.sh"
 
 ct_init_dirs
 BOOT_FILE="$CT_DATA_DIR/boot_attempts"
@@ -52,6 +54,15 @@ if ! ct_profile_valid "$WANT_PROFILE"; then
     WANT_PROFILE="dynamic_optical"
 fi
 
+WANT_BIAS=$(ct_conf_get "weight_bias" "0")
+APPLIED_BIAS=$(ct_conf_get "applied_weight_bias" "")
+WANT_CONTRAST=$(ct_conf_get "contrast_mode" "balanced")
+APPLIED_CONTRAST=$(ct_conf_get "applied_contrast_mode" "")
+ct_load_weight_curve "$WANT_BIAS" "$WANT_CONTRAST"
+
+WANT_GMS_FONTS=$(ct_conf_get "gms_fonts_enabled" "1")
+[ "$WANT_GMS_FONTS" = "0" ] || WANT_GMS_FONTS="1"
+
 WANT_EMOJI=$(ct_conf_get "emoji_enabled" "1")
 [ "$WANT_EMOJI" = "0" ] || WANT_EMOJI="1"
 APPLIED_EMOJI=$(ct_conf_get "applied_emoji" "")
@@ -71,9 +82,12 @@ if [ "$OTA_CHANGED" = "1" ]; then
     if ct_patch_all_xmls "$MODDIR" "$WANT_PROFILE" 1 ""; then
         ct_conf_set "build_fingerprint" "$LIVE_FP"
         ct_conf_set "applied_profile" "$WANT_PROFILE"
+        ct_conf_set "applied_weight_bias" "$CT_WEIGHT_BIAS"
+        ct_conf_set "applied_contrast_mode" "$CT_CONTRAST_MODE"
+        ct_conf_set "rom_curve" "${CT_ROM_CURVE:-hyperos_mipro}"
         ct_conf_set "applied_emoji" "$WANT_EMOJI"
         ct_conf_set "ota_status" "resynced"
-        ct_log "OTA resync complete (patched=$CT_PATCHED_COUNT emoji=$CT_EMOJI_ACTIVE)"
+        ct_log "OTA resync complete (patched=$CT_PATCHED_COUNT curve=${CT_ROM_CURVE:-hyperos_mipro} emoji=$CT_EMOJI_ACTIVE)"
     else
         touch "$MODDIR/disable" 2>/dev/null || true
         ct_state_set "status" "safe_disabled"
@@ -97,16 +111,25 @@ else
         ct_log "Applied iOS Emoji toggle: enabled=$WANT_EMOJI active=$CT_EMOJI_ACTIVE"
     fi
 
-    # 4. Apply pending optical profile switch selected from WebUI
-    if [ "$WANT_PROFILE" != "$APPLIED_PROFILE" ]; then
+    # 4. Apply pending optical profile or dynamic weight curve changes from WebUI
+    if [ "$WANT_PROFILE" != "$APPLIED_PROFILE" ] \
+        || [ "$CT_WEIGHT_BIAS" != "$APPLIED_BIAS" ] \
+        || [ "$CT_CONTRAST_MODE" != "$APPLIED_CONTRAST" ]; then
         if ct_patch_all_xmls "$MODDIR" "$WANT_PROFILE" 0 ""; then
             ct_conf_set "applied_profile" "$WANT_PROFILE"
-            ct_log "Applied optical profile '$WANT_PROFILE' on boot (patched=$CT_PATCHED_COUNT)"
+            ct_conf_set "applied_weight_bias" "$CT_WEIGHT_BIAS"
+            ct_conf_set "applied_contrast_mode" "$CT_CONTRAST_MODE"
+            ct_conf_set "rom_curve" "${CT_ROM_CURVE:-hyperos_mipro}"
+            ct_log "Applied profile='$WANT_PROFILE' curve=${CT_ROM_CURVE:-hyperos_mipro}/bias=$CT_WEIGHT_BIAS/$CT_CONTRAST_MODE (patched=$CT_PATCHED_COUNT)"
         fi
     fi
 fi
 
-# 5. Non-destructive bind-mount over GMS dynamic emoji cache (runs before FontManagerService)
+# 5. Non-destructive read-only bind-mount over GMS dynamic emoji & Latin font caches
 if [ "$WANT_EMOJI" = "1" ]; then
     ct_bind_gms_emoji_cache "$MODDIR" "/data/fonts/files"
 fi
+if [ "$WANT_GMS_FONTS" = "1" ]; then
+    ct_bind_gms_latin_fonts "$MODDIR"
+fi
+ct_conf_set "applied_gms_fonts" "$WANT_GMS_FONTS"

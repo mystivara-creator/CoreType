@@ -20,27 +20,75 @@
 
     <section class="card specimen-card">
       <div class="card-label">Live System Specimen</div>
-      <div class="specimen-clock">09:41</div>
-      <div class="specimen-header">Display &amp; Typography</div>
-      <div class="specimen-subhead">Dual Optical Master — Display vs Text</div>
-      <p class="specimen-body">
+      <div class="specimen-clock" id="specimen-clock">09:41</div>
+      <div class="specimen-header" id="specimen-header">Display &amp; Typography</div>
+      <div class="specimen-subhead" id="specimen-subhead">Dual Optical Master — Display vs Text</div>
+      <p class="specimen-body" id="specimen-body">
         Headers &amp; clocks render with <strong>SF Pro Display</strong> (opsz 28, Apple Display tracking)
         while paragraphs &amp; chats render with <em>SF Pro Text</em> (opsz 17, Apple Text tracking) —
         zero layout bloat on HyperOS 1–4 &amp; Android 12–16.
       </p>
       <div class="specimen-emoji">✨ 🔥 🥹 🫶🏻 🎧 🇮🇩</div>
       <div class="specimen-meta">
-        <span>Text: wght 350–500 · opsz 17 · −46 trak</span>
-        <span>Display: wght 100–300, 600–950 · opsz 28 · −26 trak</span>
+        <span id="specimen-meta-curve">Body 400 · Medium 485 · Header 550 · Bold 650</span>
+        <span>opsz 17 Text (−46) · opsz 28 Display (−26)</span>
       </div>
     </section>
 
     <section class="card">
-      <div class="card-label">Apple iOS Emoji</div>
+      <div class="card-label">Dynamic Weight Curve</div>
+
+      <div class="control-block">
+        <div class="control-head">
+          <div>
+            <div class="profile-title">Weight Bias</div>
+            <p class="profile-desc">Tapered perceptual shift across body &amp; UI labels (auto-clamped).</p>
+          </div>
+          <div class="control-actions">
+            <span id="bias-value" class="pill">0 · Standard</span>
+            <button id="bias-reset" class="reset-btn hidden" type="button">Reset</button>
+          </div>
+        </div>
+        <div class="range-wrap">
+          <span class="range-label">Light</span>
+          <input type="range" id="weight-bias-slider" min="-60" max="80" step="5" value="0" aria-label="Weight Bias" />
+          <span class="range-label">Bold</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="control-block">
+        <div class="profile-title">Header Contrast</div>
+        <p class="profile-desc">Controls visual separation between body text (400) and section headers (600–800).</p>
+        <div class="segmented" id="contrast-group" role="radiogroup" aria-label="Header Contrast">
+          <button class="seg-btn" data-contrast="soft" type="button">Soft</button>
+          <button class="seg-btn selected" data-contrast="balanced" type="button">Balanced</button>
+          <button class="seg-btn" data-contrast="apple_native" type="button">Apple Native</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-label">Ecosystem &amp; Emoji</div>
+
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <div class="profile-title">Universal GMS App Fonts</div>
+          <p class="profile-desc">Non-destructive SF Pro bind for Play Store, Gmail, Maps, Photos &amp; Gboard.</p>
+        </div>
+        <label class="switch" aria-label="Toggle Universal GMS App Fonts">
+          <input type="checkbox" id="gms-fonts-toggle" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="divider"></div>
+
       <div class="toggle-row">
         <div class="toggle-info">
           <div class="profile-title" id="emoji-title">iOS 26.4 Color Emoji</div>
-          <p class="profile-desc" id="emoji-desc">GMS-aware Android CBDT/CBLC emoji with KernelSU-umount safety.</p>
+          <p class="profile-desc" id="emoji-desc">GMS &amp; EmojiCompat aware CBDT/CBLC emoji with KernelSU-umount safety.</p>
         </div>
         <label class="switch" aria-label="Toggle Apple iOS Emoji">
           <input type="checkbox" id="emoji-toggle" />
@@ -87,6 +135,14 @@
           <dd id="kv-profile">—</dd>
         </div>
         <div class="kv-row">
+          <dt>Dynamic Weight Curve</dt>
+          <dd id="kv-curve">—</dd>
+        </div>
+        <div class="kv-row">
+          <dt>Universal GMS Fonts</dt>
+          <dd id="kv-gms-fonts">—</dd>
+        </div>
+        <div class="kv-row">
           <dt>Optical Masters</dt>
           <dd id="kv-mounted">—</dd>
         </div>
@@ -107,10 +163,6 @@
           <dd id="kv-xml">—</dd>
         </div>
         <div class="kv-row">
-          <dt>Optical Width</dt>
-          <dd id="kv-wdth">—</dd>
-        </div>
-        <div class="kv-row">
           <dt>Bootloop &amp; OTA Guard</dt>
           <dd id="kv-guard">—</dd>
         </div>
@@ -118,7 +170,7 @@
     </section>
 
     <footer class="footer">
-      CoreType v1.1.0 · Mystivara Ecosystem · Zero LSPosed
+      CoreType v1.2.0 · Mystivara Ecosystem · Zero LSPosed
     </footer>
   </main>
 

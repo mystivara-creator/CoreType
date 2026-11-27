@@ -25,7 +25,7 @@ ct_ui_print() {
 
 ct_ui_print " "
 ct_ui_print "============================================="
-ct_ui_print "  CoreType — Dual-Optical SF Pro v1.1.0"
+ct_ui_print "  CoreType — Dual-Optical SF Pro v1.2.0"
 ct_ui_print "  by Mystivara | Zero LSPosed"
 ct_ui_print "============================================="
 
@@ -47,6 +47,19 @@ ct_load_profile "$ACTIVE_PROFILE"
 ct_conf_set "profile" "$CT_PROFILE"
 ct_conf_set "applied_profile" "$CT_PROFILE"
 
+WEIGHT_BIAS=$(ct_conf_get "weight_bias" "0")
+CONTRAST_MODE=$(ct_conf_get "contrast_mode" "balanced")
+ct_load_weight_curve "$WEIGHT_BIAS" "$CONTRAST_MODE"
+ct_conf_set "weight_bias" "$CT_WEIGHT_BIAS"
+ct_conf_set "applied_weight_bias" "$CT_WEIGHT_BIAS"
+ct_conf_set "contrast_mode" "$CT_CONTRAST_MODE"
+ct_conf_set "applied_contrast_mode" "$CT_CONTRAST_MODE"
+
+GMS_FONTS_ENABLED=$(ct_conf_get "gms_fonts_enabled" "1")
+[ "$GMS_FONTS_ENABLED" = "0" ] || GMS_FONTS_ENABLED="1"
+ct_conf_set "gms_fonts_enabled" "$GMS_FONTS_ENABLED"
+ct_conf_set "applied_gms_fonts" "$GMS_FONTS_ENABLED"
+
 EMOJI_ENABLED=$(ct_conf_get "emoji_enabled" "1")
 [ "$EMOJI_ENABLED" = "0" ] || EMOJI_ENABLED="1"
 ct_conf_set "emoji_enabled" "$EMOJI_ENABLED"
@@ -61,6 +74,7 @@ ct_sync_stock_slots "$MODPATH" "/system/fonts" "/product/fonts"
 ct_sync_emoji_slots "$MODPATH" "$EMOJI_ENABLED" "/system/fonts"
 
 ct_ui_print "- Profile: $CT_PROFILE_LABEL ($CT_PROFILE)"
+ct_ui_print "- Dynamic Weight Curve: $CT_CONTRAST_LABEL | Bias ${CT_WEIGHT_BIAS}"
 ct_ui_print "- KernelSU-Umount-Safe Stock Slots (shared inode):"
 ct_ui_print "  Text    (opsz 17) -> $CT_SLOT_TEXT"
 ct_ui_print "  Display (opsz 28) -> $CT_SLOT_DISP"
@@ -73,6 +87,12 @@ else
     ct_ui_print "- HyperOS MiSans Slider: N/A or preserved (AOSP / no separate CJK fallback)"
 fi
 
+if [ "$GMS_FONTS_ENABLED" = "1" ]; then
+    ct_ui_print "- Universal GMS Fonts (Play Store/Gmail/Maps/Photos/Gboard): ENABLED"
+else
+    ct_ui_print "- Universal GMS Fonts: OFF (toggle anytime in WebUI)"
+fi
+
 if [ "$CT_EMOJI_AVAILABLE" = "1" ]; then
     if [ "$CT_EMOJI_ACTIVE" = "1" ]; then
         ct_ui_print "- Edition: FULL | Apple iOS Emoji: ENABLED (GMS-aware)"
@@ -83,11 +103,12 @@ else
     ct_ui_print "- Edition: LITE (Dual-Optical SF Pro only)"
 fi
 
-# 3. Snapshot stock XMLs and emit strictly validated Dual-Optical XMLs
+# 3. Snapshot stock XMLs and emit strictly validated Dual-Optical XMLs (Dynamic Weight Curve)
 if ! ct_patch_all_xmls "$MODPATH" "$CT_PROFILE" 0 ""; then
     abort "! Failed to patch any system font XML safely. Aborting with zero changes."
 fi
-ct_ui_print "- Patched $CT_PATCHED_COUNT system font XML(s) (100% ROM fallbacks preserved)"
+ct_conf_set "rom_curve" "${CT_ROM_CURVE:-hyperos_mipro}"
+ct_ui_print "- Patched $CT_PATCHED_COUNT system font XML(s) (curve=${CT_ROM_CURVE:-hyperos_mipro})"
 
 # Notice if user has an active Xiaomi Theme Store font overriding system fonts
 if [ -s /data/system/theme/fonts/Roboto-Regular.ttf ]; then
@@ -107,6 +128,12 @@ ct_state_write_all \
     "profile_label=$CT_PROFILE_LABEL" \
     "wdth_text=$CT_WDTH_TEXT" \
     "wdth_disp=$CT_WDTH_DISP" \
+    "rom_curve=${CT_ROM_CURVE:-hyperos_mipro}" \
+    "weight_bias=$CT_WEIGHT_BIAS" \
+    "contrast_mode=$CT_CONTRAST_MODE" \
+    "contrast_label=$CT_CONTRAST_LABEL" \
+    "gms_fonts_enabled=$GMS_FONTS_ENABLED" \
+    "gms_fonts_bound=0" \
     "patched_xmls=$CT_PATCHED_COUNT" \
     "slot_text=$CT_SLOT_TEXT" \
     "slot_disp=$CT_SLOT_DISP" \
@@ -116,10 +143,10 @@ ct_state_write_all \
     "emoji_available=$CT_EMOJI_AVAILABLE" \
     "emoji_active=$CT_EMOJI_ACTIVE" \
     "ota_status=synced" \
-    "optical_engine=dual_master_gpos_trak_umount_safe" \
+    "optical_engine=dual_master_dynamic_curve_umount_safe" \
     "bootloop_guard=armed"
 
-ct_log "Installed CoreType v1.1.0 (profile=$CT_PROFILE xmls=$CT_PATCHED_COUNT misans=$CT_MISANS_SLIDER_ACTIVE emoji=$CT_EMOJI_ACTIVE/$CT_EMOJI_AVAILABLE)"
+ct_log "Installed CoreType v1.2.0 (profile=$CT_PROFILE curve=${CT_ROM_CURVE:-hyperos_mipro}/bias=$CT_WEIGHT_BIAS/$CT_CONTRAST_MODE xmls=$CT_PATCHED_COUNT misans=$CT_MISANS_SLIDER_ACTIVE gms_fonts=$GMS_FONTS_ENABLED emoji=$CT_EMOJI_ACTIVE/$CT_EMOJI_AVAILABLE)"
 
 ct_ui_print "- Self-Healing Bootloop Guard: ARMED"
 ct_ui_print "- OTA Auto-Resync: ENABLED"

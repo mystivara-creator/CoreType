@@ -40,6 +40,8 @@ jobs:
               "fonts/CoreType-SFPro-Text-Italic.ttf",
               "fonts/CoreType-SFPro-Display.ttf",
               "fonts/CoreType-SFPro-Display-Italic.ttf",
+              "fonts/CoreType-SFPro-GMS-Medium.ttf",
+              "fonts/CoreType-SFPro-GMS-Bold.ttf",
           ]:
               out = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", f, "Display & Typography"], text=True))
               assert sum(g["ax"] for g in out) > 0, f"Zero advance in {f}"

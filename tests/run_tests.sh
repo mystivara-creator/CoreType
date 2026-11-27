@@ -49,6 +49,8 @@ assert_not_grep() {
 . "$REPO_ROOT/lib/engine.sh"
 # shellcheck disable=SC1091
 . "$REPO_ROOT/lib/emoji.sh"
+# shellcheck disable=SC1091
+. "$REPO_ROOT/lib/gms_fonts.sh"
 
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
@@ -293,7 +295,92 @@ else
     fail "Bootloop Guard did not create disable flag"
 fi
 
-printf '=== Test 5: ShellCheck Static Analysis ===\n'
+printf '=== Test 5: Dynamic Weight Curve Engine & Universal GMS App Fonts ===\n'
+# 5a. Dynamic Weight Curve math: HyperOS vs AOSP auto-calibration + bias + contrast
+ct_load_weight_curve "30" "apple_native"
+CT_ROM_CURVE="hyperos_mipro"
+_w400=$(ct_calc_wght 400)
+_w700=$(ct_calc_wght 700)
+_w100=$(ct_calc_wght 100)
+if [ "$_w400" = "430" ] && [ "$_w700" = "625" ] && [ "$_w100" = "185" ]; then
+    pass "Dynamic curve computed HyperOS +30 bias + apple_native cleanly (400->430, 700->625, 100->185)"
+else
+    fail "Unexpected HyperOS dynamic curve values (400=$_w400 700=$_w700 100=$_w100)"
+fi
+
+ct_load_weight_curve "-20" "soft"
+CT_ROM_CURVE="aosp_linear"
+_a400=$(ct_calc_wght 400)
+_a700=$(ct_calc_wght 700)
+if [ "$_a400" = "380" ] && [ "$_a700" = "600" ]; then
+    pass "Dynamic curve computed AOSP -20 bias + soft contrast cleanly (400->380, 700->600)"
+else
+    fail "Unexpected AOSP dynamic curve values (400=$_a400 700=$_a700)"
+fi
+
+# Reset curve to default for XML test
+ct_load_weight_curve "0" "balanced"
+cat > "$TMP_DIR/google_families.xml" <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<familyset>
+    <family name="sans-serif">
+        <font weight="400" style="normal">MiSansVF_Overlay.ttf</font>
+    </family>
+    <family name="google-sans-text">
+        <font weight="400" style="normal">GoogleSansText-Regular.ttf</font>
+    </family>
+    <family name="mipro">
+        <font weight="400" style="normal">MiLanProVF.ttf</font>
+    </family>
+</familyset>
+EOF
+ct_resolve_stock_slots "$HOS3_FONTS"
+if ct_patch_font_xml "$TMP_DIR/google_families.xml" "$TMP_DIR/google_out.xml" "dynamic_optical" "$HOS3_FONTS" \
+    && grep -q '<family name="google-sans-text">' "$TMP_DIR/google_out.xml" \
+    && grep -q '<family name="mipro">' "$TMP_DIR/google_out.xml" \
+    && ! grep -q 'GoogleSansText-Regular\.ttf' "$TMP_DIR/google_out.xml"; then
+    pass "Expanded XML patcher routed google-sans-text & mipro to SF Pro while preserving exact family names"
+else
+    fail "Expanded XML family routing failed"
+fi
+
+# 5b. Universal GMS Latin font bind-mount routing (Play Store, Gmail, Maps, Photos, Gboard)
+{ printf '\000\001\000\000'; dd if=/dev/zero bs=1024 count=110 2>/dev/null; } > "$FAKE_MOD/fonts/CoreType-SFPro-GMS-Medium.ttf"
+{ printf '\000\001\000\000'; dd if=/dev/zero bs=1024 count=110 2>/dev/null; } > "$FAKE_MOD/fonts/CoreType-SFPro-GMS-Bold.ttf"
+MOCK_GMS_LATIN="$TMP_DIR/gms_latin"
+MOCK_GMS_LOG="$TMP_DIR/gms_latin_mount.log"
+mkdir -p "$MOCK_GMS_LATIN"
+for _gf in \
+    Google_Sans_Text-400-100_0-0_0.ttf \
+    Google_Sans_Text-500-100_0-0_0.ttf \
+    Google_Sans-700-100_0-0_0.ttf \
+    Google_Sans_Text-400-100_0-1_0.ttf \
+    Noto_COLR_Emoji_Compat-400-100_0-0_0.ttf \
+    RobotoMono-400-100_0-0_0.ttf; do
+    printf 'stock' > "$MOCK_GMS_LATIN/$_gf"
+done
+_gbound=$(
+    mount() {
+        printf '%s\n' "$*" >> "$MOCK_GMS_LOG"
+        return 0
+    }
+    chcon() { return 0; }
+    ct_bind_gms_latin_fonts "$FAKE_MOD" "$MOCK_GMS_LATIN"
+    printf '%s' "$CT_GMS_FONTS_BOUND"
+)
+if [ "$_gbound" = "4" ] \
+    && grep -q 'CoreType-SFPro-Text\.ttf.*Google_Sans_Text-400-100_0-0_0\.ttf' "$MOCK_GMS_LOG" \
+    && grep -q 'CoreType-SFPro-GMS-Medium\.ttf.*Google_Sans_Text-500-100_0-0_0\.ttf' "$MOCK_GMS_LOG" \
+    && grep -q 'CoreType-SFPro-GMS-Bold\.ttf.*Google_Sans-700-100_0-0_0\.ttf' "$MOCK_GMS_LOG" \
+    && grep -q 'CoreType-SFPro-Text-Italic\.ttf.*Google_Sans_Text-400-100_0-1_0\.ttf' "$MOCK_GMS_LOG" \
+    && ! grep -q 'Noto_COLR_Emoji' "$MOCK_GMS_LOG" \
+    && ! grep -q 'RobotoMono' "$MOCK_GMS_LOG"; then
+    pass "Universal GMS Latin bind routed 400/500/700/Italic accurately (4/4) while skipping Emoji & Mono"
+else
+    fail "Universal GMS Latin font routing failed (bound=$_gbound)"
+fi
+
+printf '=== Test 6: ShellCheck Static Analysis ===\n'
 if command -v shellcheck >/dev/null 2>&1; then
     if shellcheck -s sh \
         "$REPO_ROOT/customize.sh" \
@@ -305,6 +392,7 @@ if command -v shellcheck >/dev/null 2>&1; then
         "$REPO_ROOT/lib/font_xml.sh" \
         "$REPO_ROOT/lib/engine.sh" \
         "$REPO_ROOT/lib/emoji.sh" \
+        "$REPO_ROOT/lib/gms_fonts.sh" \
         "$REPO_ROOT/tests/run_tests.sh"; then
         pass "ShellCheck passed with 0 warnings"
     else

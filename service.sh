@@ -12,6 +12,8 @@ MODDIR="${0%/*}"
 . "$MODDIR/lib/font_xml.sh"
 # shellcheck disable=SC1091
 . "$MODDIR/lib/emoji.sh"
+# shellcheck disable=SC1091
+. "$MODDIR/lib/gms_fonts.sh"
 
 # Low-overhead boot completion poll (2s interval, up to 90s for post-flash ART cache)
 _wait=0
@@ -28,6 +30,8 @@ fi
 
 _prof=$(ct_conf_get "applied_profile" "dynamic_optical")
 ct_load_profile "$_prof"
+ct_load_weight_curve "$(ct_conf_get "applied_weight_bias" "0")" "$(ct_conf_get "applied_contrast_mode" "balanced")"
+_rom_curve=$(ct_conf_get "rom_curve" "hyperos_mipro")
 ct_load_slots
 
 # Verify mounted stock font slots match CoreType's optical master byte sizes
@@ -45,6 +49,13 @@ if [ "${CT_MISANS_SLIDER_ACTIVE:-0}" = "1" ] && [ -r /product/fonts/MiSansVF.ttf
     if [ "$_want_sz" -gt 102400 ] && [ "$_want_sz" = "$_mlive_sz" ]; then
         _misans_prod_ok="1"
     fi
+fi
+
+# Catch late GMS downloadable Latin font caches (Play Store, Gmail, Maps, Photos, Gboard)
+CT_GMS_FONTS_BOUND=0
+_want_gms_fonts=$(ct_conf_get "applied_gms_fonts" "1")
+if [ "$_want_gms_fonts" = "1" ]; then
+    ct_bind_gms_latin_fonts "$MODDIR"
 fi
 
 # Verify Apple iOS Emoji availability & active status + catch late GMS emoji cache updates
@@ -84,13 +95,19 @@ fi
 
 _ota_state=$(ct_conf_get "ota_status" "synced")
 
-# Single-pass atomic write (1 rename instead of 15 forks)
+# Single-pass atomic write (1 rename instead of 20 forks)
 ct_state_write_all \
     "status=$_status" \
     "profile=$CT_PROFILE" \
     "profile_label=$CT_PROFILE_LABEL" \
     "wdth_text=$CT_WDTH_TEXT" \
     "wdth_disp=$CT_WDTH_DISP" \
+    "rom_curve=$_rom_curve" \
+    "weight_bias=$CT_WEIGHT_BIAS" \
+    "contrast_mode=$CT_CONTRAST_MODE" \
+    "contrast_label=$CT_CONTRAST_LABEL" \
+    "gms_fonts_enabled=$_want_gms_fonts" \
+    "gms_fonts_bound=${CT_GMS_FONTS_BOUND:-0}" \
     "font_mounted=$_font_ok" \
     "xml_active=$_xml_active" \
     "slot_text=$CT_SLOT_TEXT" \
@@ -103,8 +120,8 @@ ct_state_write_all \
     "emoji_active=$_emoji_active" \
     "gms_emoji_bound=${CT_GMS_EMOJI_BOUND:-0}" \
     "ota_status=$_ota_state" \
-    "optical_engine=dual_master_gpos_trak_umount_safe" \
+    "optical_engine=dual_master_dynamic_curve_umount_safe" \
     "bootloop_guard=$_guard_state"
 
-ct_log "Boot verify: status=$_status profile=$CT_PROFILE xml=$_xml_active fonts=$_font_ok misans=${CT_MISANS_SLIDER_ACTIVE:-0}/prod=$_misans_prod_ok emoji=$_emoji_active/$_emoji_avail/gms=${CT_GMS_EMOJI_BOUND:-0} guard=$_guard_state"
+ct_log "Boot verify: status=$_status profile=$CT_PROFILE curve=$_rom_curve/bias=$CT_WEIGHT_BIAS/$CT_CONTRAST_MODE xml=$_xml_active fonts=$_font_ok gms_fonts=$_want_gms_fonts/${CT_GMS_FONTS_BOUND:-0} misans=${CT_MISANS_SLIDER_ACTIVE:-0}/prod=$_misans_prod_ok emoji=$_emoji_active/$_emoji_avail/gms=${CT_GMS_EMOJI_BOUND:-0} guard=$_guard_state"
 ct_trim_log
