@@ -4,7 +4,7 @@
   const STATE_FILE = "/data/adb/coretype/state.prop";
   const CONF_FILE = "/data/adb/coretype/config.conf";
   const TELEM_FILE = "/dev/.coretype/telemetry.prop";
-  const ACTION_SCRIPT = "/data/adb/modules/CoreType/action.sh";
+  const ACTION_SCRIPT = "/data/adb/modules/coretype/action.sh";
   const VALID_CONTRASTS = ["soft", "balanced", "apple_native"];
   const TAB_TITLES = {
     typography: "CoreType",
