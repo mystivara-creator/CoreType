@@ -1,4 +1,5 @@
 # Build outputs & downloaded Apple font caches (never commit proprietary binaries)
+bin/
 build/
 dist/
 *.zip

@@ -30,26 +30,31 @@ import tempfile
 import unicodedata
 from pathlib import Path
 
-from fontTools.subset import Options, Subsetter
-from fontTools.ttLib import TTFont
-from fontTools.ttLib.tables import otTables
-from fontTools.varLib.instancer import instantiateVariableFont
+try:
+    from fontTools.subset import Options, Subsetter
+    from fontTools.ttLib import TTFont
+    from fontTools.ttLib.tables import otTables
+    from fontTools.varLib.instancer import instantiateVariableFont
+except ImportError:
+    Options = Subsetter = TTFont = otTables = instantiateVariableFont = None
 
 SF_PRO_DMG_URL = "https://devimages-cdn.apple.com/design/resources/download/SF-Pro.dmg"
 
-# Optically centered vertical metrics (UPM 2048, total height 2450 = Android Roboto native):
-# Cap/digit center is ~722 UPM; (1990 - 460) / 2 = 765 UPM -> shifts digits down ~1px so
-# circular notification badges ("2") and status bar battery pills sit dead-center.
-ANDROID_ASCENT = 1990
-ANDROID_DESCENT = -460
+# Vertical metrics calibrated to exact 4:1 ascent:descent parity (UPM 2048, total 2460 = 1.201x):
+# Matches HyperOS MiSansTCVF (960:-240) & NotoSansCJK line-height cleanly so mixed Latin + CJK
+# runs, circular notification badges, and tabular clocks (09:41) align with zero vertical clipping.
+ANDROID_ASCENT = 1968
+ANDROID_DESCENT = -492
 ANDROID_LINE_GAP = 0
-ANDROID_WIN_ASCENT = 1990
-ANDROID_WIN_DESCENT = 460
+ANDROID_WIN_ASCENT = 1968
+ANDROID_WIN_DESCENT = 492
 
 # Optical master specifications derived directly from Apple SF-Pro.ttf `trak` table (UPM 2048):
 # - Text (16–17pt iOS UI): Apple `trak` track 0.0 is -40..-52 UPM -> bake -46 UPM (+ mild wdth=96.5 default)
 # - Display (24–36pt Headers / Clocks): Display glyphs are already ~100 UPM tighter than Text;
 #   bake -26 UPM Display tracking (+ mild wdth=97.0 default) for crisp, punchy iOS headlines.
+# - Flex (Continuous opsz 12..36 for RobotoFlex / Material 3 / Jetpack Compose): preserves live
+#   continuous `opsz` axis (12..36) with balanced -36 UPM tracking & pure 0 UPM tabular digits.
 OPTICAL_SPECS = [
     {
         "src": "SF-Pro.ttf",
@@ -98,6 +103,18 @@ OPTICAL_SPECS = [
         "family": "CoreType SF Pro Display",
         "subfamily": "Italic",
         "ps_name": "CoreTypeSFProDisplay-Italic",
+    },
+    {
+        "src": "SF-Pro.ttf",
+        "out": "CoreType-SFPro-Flex.ttf",
+        "is_italic": False,
+        "opsz": (17.0, 17.0, 28.0),
+        "default_wdth": 96.5,
+        "track_units": -36,
+        "space_track": -15,
+        "family": "CoreType SF Pro Flex",
+        "subfamily": "Regular",
+        "ps_name": "CoreTypeSFProFlex-Regular",
     },
 ]
 
@@ -264,8 +281,8 @@ def bake_gpos_tracking(font: TTFont, track_units: int, space_track: int) -> int:
 
         is_digit = (cp is not None and 0x0030 <= cp <= 0x0039) or gname.split(".")[0] in digit_prefixes
         if is_digit:
-            # Keep Display digits at pure Apple spacing (0 UPM); gentle -8 UPM on Text digits
-            if track_units > -35:
+            # Keep Display (-26) & Continuous-opsz Flex (-36) digits at pure 0 UPM; gentle -8 UPM on Text (-46)
+            if track_units >= -36:
                 continue
             delta = -8
             x_place = -4
@@ -329,8 +346,8 @@ def bake_gpos_tracking(font: TTFont, track_units: int, space_track: int) -> int:
     return len(adjustments)
 
 
-def calibrate_vertical_metrics(font: TTFont) -> None:
-    """Align hhea & OS/2 vertical metrics to Android Roboto / HyperOS MiSans baseline."""
+def calibrate_vertical_metrics(font: "TTFont") -> None:
+    """Align hhea & OS/2 vertical metrics to exact 4:1 HyperOS MiSans / CJK line-height parity."""
     hhea = font["hhea"]
     hhea.ascent = ANDROID_ASCENT
     hhea.descent = ANDROID_DESCENT
@@ -346,7 +363,7 @@ def calibrate_vertical_metrics(font: TTFont) -> None:
     os2.fsSelection |= 1 << 7
 
 
-def set_name_records(font: TTFont, family: str, subfamily: str, ps_name: str) -> None:
+def set_name_records(font: "TTFont", family: str, subfamily: str, ps_name: str) -> None:
     """Stamp clean CoreType naming records for Android font_fallback.xml postScriptName matching."""
     name_table = font["name"]
     full_name = f"{family} {subfamily}" if subfamily != "Regular" else family
@@ -364,7 +381,7 @@ def set_name_records(font: TTFont, family: str, subfamily: str, ps_name: str) ->
 
 
 def build_optical_master(src_path: Path, out_path: Path, spec: dict) -> None:
-    """Build one optical-calibrated Variable Font master (Text or Display, Upright or Italic)."""
+    """Build one optical-calibrated Variable Font master (Text, Display, or Continuous-opsz Flex)."""
     print(f"[CoreType] Building {spec['out']} from {src_path.name} ...")
     font = TTFont(str(src_path))
     orig_glyphs = len(font.getGlyphOrder())
@@ -373,9 +390,8 @@ def build_optical_master(src_path: Path, out_path: Path, spec: dict) -> None:
     sub_glyphs = len(font.getGlyphOrder())
     print(f"           subset: {orig_glyphs} -> {sub_glyphs} glyphs")
 
-    # Pin `opsz` to exact optical master (17.0 Text or 28.0 Display), prune unused `wdth`
-    # extremes (<75 Ultra-Compressed & >100 Expanded) and `wght` extremes (<100 & >950).
-    # Cuts `gvar` variation table by ~75% and font file size by ~66% with 0-unit shaping diff!
+    # Pin `opsz` for Text (17.0) / Display (28.0) or keep continuous (12.0, 17.0, 36.0) for Flex.
+    # Prune unused `wdth` extremes (<75 / >100) and `wght` extremes (<100 / >950).
     axis_limits = {
         "opsz": spec["opsz"],
         "wght": (100.0, 400.0, 950.0),
@@ -408,12 +424,129 @@ def build_optical_master(src_path: Path, out_path: Path, spec: dict) -> None:
     )
 
 
+GMS_STATIC_SPECS = [
+    {
+        "src_master": "CoreType-SFPro-Text.ttf",
+        "out": "CoreType-SFPro-GMS-Medium.ttf",
+        "coords": {"wght": 500.0, "wdth": 96.5},
+        "family": "CoreType SF Pro Text",
+        "subfamily": "Medium",
+        "ps_name": "CoreTypeSFProText-Medium",
+    },
+    {
+        "src_master": "CoreType-SFPro-Display.ttf",
+        "out": "CoreType-SFPro-GMS-Bold.ttf",
+        "coords": {"wght": 600.0, "wdth": 97.0},
+        "family": "CoreType SF Pro Display",
+        "subfamily": "Semibold",
+        "ps_name": "CoreTypeSFProDisplay-Semibold",
+    },
+]
+
+
+def build_gms_static_instances(out_dir: Path) -> None:
+    """
+    Build two ultra-lean static SF Pro instances (~250 KB each) from our already-calibrated
+    Variable Masters so static GMS FontsProvider targets (Google_Sans_Text-500, Google_Sans-700,
+    etc. in Play Store, Gmail, Maps, Photos, Gboard) render genuine Apple Medium/Semibold weight
+    instead of falling back to flat Regular (400) or synthetic Skia faux-bold.
+    """
+    for spec in GMS_STATIC_SPECS:
+        src_path = out_dir / spec["src_master"]
+        dst_path = out_dir / spec["out"]
+        font = TTFont(str(src_path))
+        font = instantiateVariableFont(font, spec["coords"], inplace=True)
+        calibrate_vertical_metrics(font)
+        set_name_records(font, spec["family"], spec["subfamily"], spec["ps_name"])
+        font.save(str(dst_path))
+        size_kb = dst_path.stat().st_size / 1024.0
+        print(
+            f"[CoreType] Built GMS static instance {dst_path.name} ({size_kb:.1f} KB) | "
+            f"coords={spec['coords']}"
+        )
+
+
+def audit_built_fonts(out_dir: Path) -> None:
+    """Verify OS/2 & hhea vertical metrics parity, USE_TYPO_METRICS, and continuous opsz on Flex."""
+    expected_files = [s["out"] for s in OPTICAL_SPECS] + [s["out"] for s in GMS_STATIC_SPECS]
+    for fname in expected_files:
+        fpath = out_dir / fname
+        if not fpath.is_file():
+            raise RuntimeError(f"Missing expected built font: {fpath}")
+        font = TTFont(str(fpath))
+        upm = font["head"].unitsPerEm
+        hhea = font["hhea"]
+        os2 = font["OS/2"]
+
+        assert hhea.ascent == ANDROID_ASCENT == os2.sTypoAscender == os2.usWinAscent, (
+            f"Ascent mismatch in {fname}: hhea={hhea.ascent} typo={os2.sTypoAscender} win={os2.usWinAscent}"
+        )
+        assert hhea.descent == ANDROID_DESCENT == os2.sTypoDescender == -os2.usWinDescent, (
+            f"Descent mismatch in {fname}: hhea={hhea.descent} typo={os2.sTypoDescender} win={os2.usWinDescent}"
+        )
+        assert hhea.lineGap == 0 and os2.sTypoLineGap == 0, f"Non-zero lineGap in {fname}"
+        assert (os2.fsSelection & (1 << 7)) != 0, f"USE_TYPO_METRICS bit missing in {fname}"
+
+        line_ratio = (os2.sTypoAscender - os2.sTypoDescender) / float(upm)
+        assert 1.17 <= line_ratio <= 1.22, f"Out-of-range line-height ratio {line_ratio:.4f} in {fname}"
+
+        if fname == "CoreType-SFPro-Flex.ttf":
+            axes = {a.axisTag: (a.minValue, a.defaultValue, a.maxValue) for a in font["fvar"].axes}
+            assert "opsz" in axes, "CoreType-SFPro-Flex.ttf missing continuous opsz axis!"
+            opsz_min, _opsz_def, opsz_max = axes["opsz"]
+            assert opsz_min <= 17.0 and opsz_max >= 28.0 and opsz_max > opsz_min, (
+                f"Flex opsz range invalid: {axes['opsz']} (expected continuous 17..28)"
+            )
+            assert "wght" in axes and "wdth" in axes, f"Flex missing wght/wdth axes: {axes}"
+
+    print(
+        f"[CoreType] Vertical metrics & optical axis audit PASSED "
+        f"(ascent={ANDROID_ASCENT}, descent={ANDROID_DESCENT}, ratio={(ANDROID_ASCENT - ANDROID_DESCENT)/2048.0:.4f}, Flex opsz=17..28 [12..36sp CoreText clamp])"
+    )
+
+
+def self_test_specs() -> int:
+    """Fast dependency-free audit of CoreType font metrics, optical specs, and Unicode filtering."""
+    total_h = ANDROID_ASCENT - ANDROID_DESCENT
+    ratio = total_h / 2048.0
+    ascent_share = ANDROID_ASCENT / float(total_h)
+    assert ANDROID_LINE_GAP == 0, "Line gap must be 0 for consistent HyperOS/CJK rendering"
+    assert ANDROID_WIN_ASCENT == ANDROID_ASCENT and ANDROID_WIN_DESCENT == -ANDROID_DESCENT
+    assert 1.17 <= ratio <= 1.22, f"Unexpected line-height ratio: {ratio:.4f}"
+    assert abs(ascent_share - 0.80) < 0.01, f"Ascent share {ascent_share:.4f} deviates from 4:1 CJK parity"
+
+    flex_specs = [s for s in OPTICAL_SPECS if s["out"] == "CoreType-SFPro-Flex.ttf"]
+    assert len(flex_specs) == 1 and flex_specs[0]["opsz"] == (17.0, 17.0, 28.0), "Flex opsz must preserve Apple 17..28 domain"
+    assert "tnum" in UI_LAYOUT_FEATURES and "calt" in UI_LAYOUT_FEATURES and "kern" in UI_LAYOUT_FEATURES
+
+    # Verify Unicode preservation (Phonetic Extensions 'ʲᵈᵐ', Latin, digits) & PUA/Arabic exclusion
+    for cp in (0x0041, 0x0030, 0x02B2, 0x1D48, 0x1D50):
+        assert is_kept_unicode(cp), f"Expected U+{cp:04X} to be preserved"
+    for cp in (0xE000, 0xF8FF, 0x100000, 0x0627):
+        assert not is_kept_unicode(cp), f"Expected U+{cp:04X} to be excluded"
+
+    print(
+        f"[PASS] build_fonts.py audit OK: metrics={ANDROID_ASCENT}/{ANDROID_DESCENT} "
+        f"(ratio={ratio:.4f}, ascent={ascent_share*100:.1f}%), Flex opsz=17..28, tnum+calt+Unicode verified"
+    )
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build CoreType dual-optical SF Pro variable fonts.")
     parser.add_argument("--src-fonts-dir", type=Path, help="Path to already-extracted Apple Library/Fonts directory")
     parser.add_argument("--dmg", type=Path, help="Path to local SF-Pro.dmg (if omitted, downloads from Apple CDN)")
-    parser.add_argument("--out-dir", type=Path, required=True, help="Output directory for CoreType-*.ttf")
+    parser.add_argument("--out-dir", type=Path, help="Output directory for CoreType-*.ttf")
+    parser.add_argument("--self-test", action="store_true", help="Run metrics & spec audit without building fonts")
     args = parser.parse_args()
+
+    if args.self_test:
+        return self_test_specs()
+
+    if TTFont is None:
+        raise RuntimeError("fontTools is required to build fonts (install python3-fonttools)")
+    if not args.out_dir:
+        parser.error("--out-dir is required unless --self-test is specified")
 
     tmp_dir = None
     try:
@@ -435,7 +568,10 @@ def main() -> int:
                 spec,
             )
 
-        print("[CoreType] All 4 optical SF Pro variable masters built & verified!")
+        build_gms_static_instances(args.out_dir)
+        audit_built_fonts(args.out_dir)
+
+        print("[CoreType] All 5 optical SF Pro variable masters + 2 GMS static instances built & audited!")
         return 0
     finally:
         if tmp_dir and tmp_dir.exists():

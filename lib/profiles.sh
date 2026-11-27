@@ -45,3 +45,50 @@ ct_load_profile() {
             ;;
     esac
 }
+
+# Clamp user weight bias strictly to [-60, +80] (integer, default 0)
+ct_weight_bias_normalize() {
+    _raw="${1:-0}"
+    case "$_raw" in
+        ''|*[!0-9-]*)
+            printf '0\n'
+            return 0
+            ;;
+    esac
+    # Reject stray minus signs like "-" or "10-5"
+    case "$_raw" in
+        -|-*[!0-9]*|[0-9]*-*)
+            printf '0\n'
+            return 0
+            ;;
+    esac
+    if [ "$_raw" -lt -60 ]; then
+        printf '%s\n' "-60"
+    elif [ "$_raw" -gt 80 ]; then
+        printf '%s\n' "80"
+    else
+        printf '%s\n' "$_raw"
+    fi
+}
+
+ct_contrast_valid() {
+    case "$1" in
+        soft|balanced|apple_native) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Sets CT_WEIGHT_BIAS (-60..80), CT_CONTRAST_MODE (soft|balanced|apple_native), CT_CONTRAST_LABEL
+ct_load_weight_curve() {
+    CT_WEIGHT_BIAS=$(ct_weight_bias_normalize "${1:-0}")
+    _cm="${2:-balanced}"
+    if ! ct_contrast_valid "$_cm"; then
+        _cm="balanced"
+    fi
+    CT_CONTRAST_MODE="$_cm"
+    case "$_cm" in
+        soft)         CT_CONTRAST_LABEL="Soft Harmony" ;;
+        balanced)     CT_CONTRAST_LABEL="HyperOS Balanced" ;;
+        apple_native) CT_CONTRAST_LABEL="Apple Native" ;;
+    esac
+}

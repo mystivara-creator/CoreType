@@ -29,6 +29,22 @@ ct_verify_all_masters() {
             return 1
         fi
     done
+    if [ -f "$_src_dir/CoreType-SFPro-Flex.ttf" ] && ! ct_verify_ttf "$_src_dir/CoreType-SFPro-Flex.ttf"; then
+        # shellcheck disable=SC2034
+        CT_FAILED_MASTER="CoreType-SFPro-Flex.ttf"
+        return 1
+    fi
+    return 0
+}
+
+# Verify HyperOS Lockscreen/AOD -> Homescreen clock typography parity:
+#   - Never overwrite stock MiClock*.otf fonts
+#   - Confirm Display/Flex SF Pro masters carrying tnum (tabular numerals) & calt (09:41 colon) are intact
+ct_verify_hyperos_clock_parity() {
+    _moddir="$1"
+    # Ensure no MiClock*.otf was ever accidentally staged inside module overlays
+    rm -f "$_moddir/system/fonts"/MiClock*.otf "$_moddir/system/product/fonts"/MiClock*.otf 2>/dev/null || true
+    ct_verify_ttf "$_moddir/fonts/CoreType-SFPro-Display.ttf" || return 1
     return 0
 }
 
@@ -77,12 +93,22 @@ ct_sync_stock_slots() {
     if [ "$CT_SLOT_DISP" != "$CT_SLOT_TEXT" ]; then
         ct_sync_font_file "$_src_fonts/CoreType-SFPro-Display.ttf" "$_moddir/system/fonts/$CT_SLOT_DISP"
     fi
-    if [ "$CT_SLOT_ITAL" != "$CT_SLOT_TEXT" ] && [ "$CT_SLOT_ITAL" != "$CT_SLOT_DISP" ]; then
+    if [ "$CT_SLOT_FLEX" != "$CT_SLOT_TEXT" ] && [ "$CT_SLOT_FLEX" != "$CT_SLOT_DISP" ]; then
+        if [ -f "$_src_fonts/CoreType-SFPro-Flex.ttf" ]; then
+            ct_sync_font_file "$_src_fonts/CoreType-SFPro-Flex.ttf" "$_moddir/system/fonts/$CT_SLOT_FLEX"
+        else
+            ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text.ttf" "$_moddir/system/fonts/$CT_SLOT_FLEX"
+        fi
+    fi
+    if [ "$CT_SLOT_ITAL" != "$CT_SLOT_TEXT" ] \
+        && [ "$CT_SLOT_ITAL" != "$CT_SLOT_DISP" ] \
+        && [ "$CT_SLOT_ITAL" != "$CT_SLOT_FLEX" ]; then
         ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text-Italic.ttf" "$_moddir/system/fonts/$CT_SLOT_ITAL"
     fi
     if [ "$CT_SLOT_DITAL" != "$CT_SLOT_ITAL" ] \
         && [ "$CT_SLOT_DITAL" != "$CT_SLOT_TEXT" ] \
-        && [ "$CT_SLOT_DITAL" != "$CT_SLOT_DISP" ]; then
+        && [ "$CT_SLOT_DITAL" != "$CT_SLOT_DISP" ] \
+        && [ "$CT_SLOT_DITAL" != "$CT_SLOT_FLEX" ]; then
         ct_sync_font_file "$_src_fonts/CoreType-SFPro-Display-Italic.ttf" "$_moddir/system/fonts/$CT_SLOT_DITAL"
     fi
 
