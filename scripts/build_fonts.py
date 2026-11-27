@@ -37,15 +37,6 @@ from fontTools.varLib.instancer import instantiateVariableFont
 
 SF_PRO_DMG_URL = "https://devimages-cdn.apple.com/design/resources/download/SF-Pro.dmg"
 
-# Unicode ranges to preserve (drops ~32,900 Apple-only PUA SF Symbols U+E000-F8FF, U+F0000+)
-KEEP_UNICODES = (
-    list(range(0x0000, 0x0530))    # Basic Latin, Latin-1, Ext-A/B, IPA, Spacing Modifiers, Combining Marks, Greek, Cyrillic
-    + list(range(0x1E00, 0x27FF))  # Latin Ext Additional (Vietnamese), Punctuation, Currency, Arrows, Math, Box, Misc Symbols
-    + list(range(0x2E00, 0x2E7F))  # Supplemental Punctuation
-    + list(range(0xFB00, 0xFB06))  # Standard Latin ligatures
-    + [0xFEFF, 0xFFFC, 0xFFFD]     # BOM, Object Replacement, Replacement Char
-)
-
 # Optically centered vertical metrics (UPM 2048, total height 2450 = Android Roboto native):
 # Cap/digit center is ~722 UPM; (1990 - 460) / 2 = 765 UPM -> shifts digits down ~1px so
 # circular notification badges ("2") and status bar battery pills sit dead-center.
@@ -178,8 +169,30 @@ UI_LAYOUT_FEATURES = [
 ]
 
 
+def is_kept_unicode(cp: int) -> bool:
+    """
+    Keep ALL real Unicode glyphs present in Apple SF-Pro.ttf (including Basic/Ext Latin A-E,
+    Phonetic Extensions U+1D00..1DFF for superscripts like 'ʲᵈᵐ', Greek, Cyrillic, Vietnamese,
+    Superscripts/Subscripts, Math, Currency, Punctuation, Arrows, Symbols), while dropping:
+      - Apple-only Private Use Area SF Symbols (U+E000..F8FF, U+F0000+)
+      - Arabic presentation ranges so ROM-native MiSansArabicVF / NotoNaskhArabic handles Arabic cleanly
+    """
+    # Drop Private Use Areas (Apple SF Symbols)
+    if (0xE000 <= cp <= 0xF8FF) or cp >= 0xF0000:
+        return False
+    # Preserve BOM & Replacement chars; let ROM's native Arabic fonts handle Arabic blocks
+    if (0x0600 <= cp <= 0x06FF) or (0x0750 <= cp <= 0x077F) or (0x08A0 <= cp <= 0x08FF):
+        return False
+    if (0xFB50 <= cp <= 0xFDFF) or (0xFE70 <= cp <= 0xFEFE):
+        return False
+    return True
+
+
 def subset_font(font: TTFont) -> None:
-    """Strip Apple-only PUA glyphs & desktop-only OT sets while keeping 100% UI scripts & features."""
+    """Strip Apple-only PUA glyphs & desktop-only OT sets while keeping 100% real UI scripts & features."""
+    cmap = font.getBestCmap() or {}
+    keep_cps = [cp for cp in cmap.keys() if is_kept_unicode(cp)]
+
     opts = Options()
     opts.layout_features = UI_LAYOUT_FEATURES
     opts.name_IDs = [0, 1, 2, 4, 5, 6, 16, 17]
@@ -189,7 +202,7 @@ def subset_font(font: TTFont) -> None:
     opts.drop_tables += ["DSIG", "trak", "MERG", "meta"]
     opts.hinting = True
     subsetter = Subsetter(options=opts)
-    subsetter.populate(unicodes=KEEP_UNICODES)
+    subsetter.populate(unicodes=keep_cps)
     subsetter.subset(font)
 
 
@@ -228,6 +241,13 @@ def bake_gpos_tracking(font: TTFont, track_units: int, space_track: int) -> int:
             if gcls == 3:
                 mark_glyphs.add(gname)
 
+    # Identify ASCII digit glyphs (including tnum/proportional alternates like zero.tf..nine.tf)
+    # so narrow UI pills (e.g. battery "100", clocks "00:00") never suffer cramped "00" spacing.
+    digit_prefixes = (
+        "zero", "one", "two", "three", "four",
+        "five", "six", "seven", "eight", "nine",
+    )
+
     adjustments = []
     for gname in glyph_order:
         if gname == ".notdef" or gname in mark_glyphs:
@@ -242,7 +262,14 @@ def bake_gpos_tracking(font: TTFont, track_units: int, space_track: int) -> int:
             if cat in ("Mn", "Me", "Cf", "Cc"):
                 continue
 
-        if cp in (0x0020, 0x00A0):
+        is_digit = (cp is not None and 0x0030 <= cp <= 0x0039) or gname.split(".")[0] in digit_prefixes
+        if is_digit:
+            # Keep Display digits at pure Apple spacing (0 UPM); gentle -8 UPM on Text digits
+            if track_units > -35:
+                continue
+            delta = -8
+            x_place = -4
+        elif cp in (0x0020, 0x00A0):
             delta = space_track
             x_place = 0
         elif aw <= 450:

@@ -22,7 +22,7 @@ jobs:
       - name: Run POSIX test suite & ShellCheck
         run: sh tests/run_tests.sh
 
-      - name: Build optical-calibrated SF Pro variable fonts
+      - name: Build optical-calibrated SF Pro variable fonts (iOS 27.x)
         run: |
           /usr/bin/python3 scripts/build_fonts.py --out-dir fonts
           ls -lh fonts/
@@ -30,7 +30,7 @@ jobs:
       - name: Verify HarfBuzz shaping & Apple calt clock colon
         run: |
           python3 - <<'PY'
-          import json, subprocess, sys
+          import json, subprocess
           for f in [
               "fonts/CoreType-SFPro-Text.ttf",
               "fonts/CoreType-SFPro-Text-Italic.ttf",
@@ -43,14 +43,18 @@ jobs:
           c_clock = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "09:41"], text=True))[2]["g"]
           c_text  = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "a:b"], text=True))[1]["g"]
           assert c_clock != c_text, "Apple calt centered clock colon did not activate!"
-          print(f"[PASS] HarfBuzz GPOS tracking & Apple calt clock colon verified ({c_text} -> {c_clock})")
+          d_100 = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "100"], text=True))
+          assert all(g["dx"] == 0 for g in d_100), f"Unexpected negative tracking on Display digits: {d_100}"
+          s_jdm = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Text.ttf", "Yanz 25 \u02b2\u1d48\u1d50"], text=True))
+          assert all(g["g"] != ".notdef" for g in s_jdm), f"Missing superscript glyph in Phonetic Extensions: {s_jdm}"
+          print(f"[PASS] HarfBuzz GPOS tracking, pure digit spacing (100), Phonetic Extensions (jdm) & Apple calt colon verified ({c_text} -> {c_clock})")
           PY
 
-      - name: Package flashable Magisk / KernelSU / APatch zip
+      - name: Package CoreType Lite (SF Pro Only)
         run: |
           VERSION=$(grep '^version=' module.prop | cut -d= -f2)
           mkdir -p dist
-          zip -r9 "dist/CoreType-${VERSION}.zip" \
+          zip -r9 "dist/CoreType-${VERSION}-Lite.zip" \
             module.prop \
             customize.sh \
             post-fs-data.sh \
@@ -60,10 +64,36 @@ jobs:
             fonts/ \
             webroot/ \
             -x '*.DS_Store'
-          ls -lh "dist/CoreType-${VERSION}.zip"
+          ls -lh "dist/CoreType-${VERSION}-Lite.zip"
 
-      - name: Upload CoreType flashable artifact
+      - name: Fetch & verify Apple iOS 26.4 Color Emoji (Android CBDT/CBLC)
+        run: |
+          /usr/bin/python3 scripts/fetch_emoji.py --out fonts/CoreType-AppleEmoji.ttf
+          ls -lh fonts/
+
+      - name: Package CoreType Full (SF Pro + Apple iOS Emoji)
+        run: |
+          VERSION=$(grep '^version=' module.prop | cut -d= -f2)
+          zip -r9 "dist/CoreType-${VERSION}-Full.zip" \
+            module.prop \
+            customize.sh \
+            post-fs-data.sh \
+            service.sh \
+            uninstall.sh \
+            lib/ \
+            fonts/ \
+            webroot/ \
+            -x '*.DS_Store'
+          ls -lh "dist/CoreType-${VERSION}-Full.zip"
+
+      - name: Upload CoreType Lite artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CoreType-Flashable-Zip
-          path: dist/CoreType-*.zip
+          name: CoreType-Lite-Zip
+          path: dist/CoreType-*-Lite.zip
+
+      - name: Upload CoreType Full artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoreType-Full-Zip
+          path: dist/CoreType-*-Full.zip

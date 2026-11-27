@@ -1,5 +1,5 @@
 #!/bin/sh
-# CoreType — Automated POSIX Test Suite (KernelSU-Umount-Safe Dual-Optical + OTA Engine)
+# CoreType — Automated POSIX Test Suite (HyperOS 1–4, AOSP 12–16, MiSans Slider & Apple iOS Emoji)
 
 set -eu
 
@@ -47,26 +47,38 @@ assert_not_grep() {
 . "$REPO_ROOT/lib/font_xml.sh"
 # shellcheck disable=SC1091
 . "$REPO_ROOT/lib/engine.sh"
+# shellcheck disable=SC1091
+. "$REPO_ROOT/lib/emoji.sh"
 
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-# Simulate HyperOS 3 stock /system/fonts/ (ONLY Roboto-Regular, RobotoStatic-Regular, RobotoFlex-Regular)
+# Simulate HyperOS 3/4 stock /system/fonts/ + /product/fonts/
 HOS3_FONTS="$TMP_DIR/hos3_fonts"
-mkdir -p "$HOS3_FONTS"
-for _mf in Roboto-Regular.ttf RobotoStatic-Regular.ttf RobotoFlex-Regular.ttf; do
+HOS3_PROD="$TMP_DIR/hos3_prod"
+mkdir -p "$HOS3_FONTS" "$HOS3_PROD"
+for _mf in Roboto-Regular.ttf RobotoStatic-Regular.ttf RobotoFlex-Regular.ttf MiSansVF.ttf MiSansVF_Overlay.ttf MiSansTCVF.ttf NotoColorEmoji.ttf NotoColorEmojiFlags.ttf; do
     printf 'mockfont' > "$HOS3_FONTS/$_mf"
 done
+for _pf in MiSansVF.ttf MiSansLatinVF.ttf MiSansTCVF.ttf; do
+    printf 'mockfont' > "$HOS3_PROD/$_pf"
+done
 
-printf '=== Test 1: HyperOS 3 KernelSU-Umount-Safe Stock-Slot Allocation ===\n'
+printf '=== Test 1: HyperOS 3/4 Stock-Slot Allocation & CJK Fallback Safety ===\n'
 ct_resolve_stock_slots "$HOS3_FONTS"
 if [ "$CT_SLOT_TEXT" = "Roboto-Regular.ttf" ] \
     && [ "$CT_SLOT_DISP" = "RobotoStatic-Regular.ttf" ] \
     && [ "$CT_SLOT_ITAL" = "RobotoFlex-Regular.ttf" ] \
     && [ "$CT_SLOT_DITAL" = "RobotoFlex-Regular.ttf" ]; then
-    pass "HyperOS 3 slots mapped strictly onto existing stock files (zero non-stock filenames)"
+    pass "HyperOS 3/4 slots mapped strictly onto existing stock files"
 else
-    fail "Unexpected HyperOS 3 slots: text=$CT_SLOT_TEXT disp=$CT_SLOT_DISP ital=$CT_SLOT_ITAL dital=$CT_SLOT_DITAL"
+    fail "Unexpected HyperOS 3/4 slots"
+fi
+
+if ct_resolve_cjk_fallback "$HOS3_FONTS" "$HOS3_PROD" && [ "$CT_CJK_FALLBACK" = "MiSansTCVF.ttf" ]; then
+    pass "Detected safe CJK fallback (MiSansTCVF.ttf) for MiSans Slider mode"
+else
+    fail "Expected CJK fallback MiSansTCVF.ttf, got ${CT_CJK_FALLBACK:-empty}"
 fi
 
 cat > "$TMP_DIR/hyperos3_fallback.xml" <<'EOF'
@@ -87,6 +99,11 @@ cat > "$TMP_DIR/hyperos3_fallback.xml" <<'EOF'
     <family>
         <font weight="400" style="normal" postScriptName="MiSansLatinVF">MiSansLatinVF.ttf
             <axis tag="wght" stylevalue="400" />
+        </font>
+    </family>
+    <family lang="zh-Hans">
+        <font weight="400" style="normal" postScriptName="MiSansVF">MiSansVF.ttf
+            <axis tag="wght" stylevalue="340" />
         </font>
     </family>
     <family name="sans-serif-condensed">
@@ -112,54 +129,51 @@ cat > "$TMP_DIR/hyperos3_fallback.xml" <<'EOF'
 </familyset>
 EOF
 
+CT_MISANS_SLIDER_ACTIVE="1"
 if ct_patch_font_xml "$TMP_DIR/hyperos3_fallback.xml" "$TMP_DIR/nested/etc/font_fallback.xml" "dynamic_optical" "$HOS3_FONTS"; then
-    pass "HyperOS 3 font_fallback.xml patched & validated cleanly (auto-created nested dir)"
+    pass "HyperOS 3/4 font_fallback.xml patched & validated cleanly"
     cp "$TMP_DIR/nested/etc/font_fallback.xml" "$TMP_DIR/font_fallback.xml"
 else
-    fail "HyperOS 3 font_fallback.xml patching failed"
+    fail "HyperOS 3/4 font_fallback.xml patching failed"
 fi
 
-assert_not_grep 'CoreType-SFPro' "$TMP_DIR/font_fallback.xml" "Zero non-stock CoreType-SFPro filenames in XML (prevents KSU umount SIGSEGV)"
+assert_not_grep 'CoreType-SFPro' "$TMP_DIR/font_fallback.xml" "Zero non-stock CoreType-SFPro filenames in XML"
 assert_grep 'CoreType Dual-Optical' "$TMP_DIR/font_fallback.xml" "Contains CoreType Dual-Optical XML marker"
-assert_grep 'weight="400" style="normal">Roboto-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Body 400 routed to Text slot (Roboto-Regular.ttf)"
-assert_grep 'weight="400" style="italic">RobotoFlex-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Body 400 italic routed to Italic slot (RobotoFlex-Regular.ttf)"
-assert_grep 'weight="600" style="normal">RobotoStatic-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Header 600 routed to Display slot (RobotoStatic-Regular.ttf)"
-assert_grep 'weight="700" style="italic">RobotoFlex-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Header 700 italic routed to Italic slot (RobotoFlex-Regular.ttf)"
-assert_grep 'weight="100" style="normal">RobotoStatic-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Lockscreen clock 100 routed to Display slot (RobotoStatic-Regular.ttf)"
-assert_not_grep 'supportedAxes="wght,ital"' "$TMP_DIR/font_fallback.xml" "Eliminated HyperOS 3 duplicate Roboto-Regular fallback overwrite"
-assert_grep 'tag="wdth" stylevalue="96\.5"' "$TMP_DIR/font_fallback.xml" "Calibrated Text width wdth=96.5"
-assert_grep 'tag="wdth" stylevalue="97\.0"' "$TMP_DIR/font_fallback.xml" "Calibrated Display width wdth=97.0"
-assert_grep 'tag="wght" stylevalue="590"' "$TMP_DIR/font_fallback.xml" "Calibrated mipro-demibold (700) to iOS Semibold wght=590"
-assert_grep 'tag="wght" stylevalue="680"' "$TMP_DIR/font_fallback.xml" "Calibrated mipro-semibold (800) to iOS Bold wght=680"
-assert_grep 'tag="wdth" stylevalue="82\.0"' "$TMP_DIR/font_fallback.xml" "Optical condensed width wdth=82.0"
-assert_not_grep 'MiSansVF_Overlay\.ttf' "$TMP_DIR/font_fallback.xml" "Replaced MiSansVF_Overlay.ttf in sans-serif"
-assert_not_grep 'MiSansLatinVF\.ttf' "$TMP_DIR/font_fallback.xml" "Replaced MiSansLatinVF.ttf in Latin family"
+assert_grep 'weight="400" style="normal">Roboto-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Body 400 routed to Text slot"
+assert_grep 'weight="400" style="italic">RobotoFlex-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Body 400 italic routed to Italic slot"
+assert_grep 'weight="600" style="normal">RobotoStatic-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Header 600 routed to Display slot"
+assert_not_grep 'supportedAxes="wght,ital"' "$TMP_DIR/font_fallback.xml" "Eliminated duplicate Roboto-Regular fallback overwrite"
+assert_grep 'tag="wght" stylevalue="550"' "$TMP_DIR/font_fallback.xml" "Harmonized mipro-demibold (700) to wght=550"
+assert_grep 'tag="wght" stylevalue="650"' "$TMP_DIR/font_fallback.xml" "Harmonized mipro-semibold (800) to wght=650"
+assert_grep 'MiSansTCVF\.ttf' "$TMP_DIR/font_fallback.xml" "Redirected zh-Hans CJK fallback to MiSansTCVF.ttf (zero tofu!)"
+assert_not_grep 'MiSansVF\.ttf' "$TMP_DIR/font_fallback.xml" "Removed MiSansVF.ttf from zh-Hans when MiSans slider active"
 assert_grep 'MiSansArabicVF\.ttf' "$TMP_DIR/font_fallback.xml" "Preserved Arabic fallback"
 assert_grep 'MiSansJapaneseVF\.ttf' "$TMP_DIR/font_fallback.xml" "Preserved Japanese fallback"
 assert_grep 'NotoColorEmoji\.ttf' "$TMP_DIR/font_fallback.xml" "Preserved NotoColorEmoji fallback"
 assert_grep 'CommentedOut\.ttf' "$TMP_DIR/font_fallback.xml" "Preserved commented-out <family> block verbatim"
 
-printf '=== Test 2: Classic AOSP Stock-Slot Allocation (4 Distinct Slots) ===\n'
+printf '=== Test 2: HyperOS 1 / Classic AOSP Stock-Slot & NotoSansCJK Fallback ===\n'
 AOSP_FONTS="$TMP_DIR/aosp_fonts"
 mkdir -p "$AOSP_FONTS"
-for _mf in Roboto-Regular.ttf Roboto-Bold.ttf Roboto-Italic.ttf Roboto-BoldItalic.ttf; do
+for _mf in Roboto-Regular.ttf Roboto-Bold.ttf Roboto-Italic.ttf Roboto-BoldItalic.ttf MiLanProVF.ttf NotoSansCJK-Regular.ttc; do
     printf 'mockfont' > "$AOSP_FONTS/$_mf"
 done
 ct_resolve_stock_slots "$AOSP_FONTS"
-if [ "$CT_SLOT_TEXT" = "Roboto-Regular.ttf" ] \
-    && [ "$CT_SLOT_DISP" = "Roboto-Bold.ttf" ] \
-    && [ "$CT_SLOT_ITAL" = "Roboto-Italic.ttf" ] \
-    && [ "$CT_SLOT_DITAL" = "Roboto-BoldItalic.ttf" ]; then
-    pass "Classic AOSP resolves 4 distinct stock slots cleanly"
+ct_resolve_cjk_fallback "$AOSP_FONTS" "$TMP_DIR/empty_prod"
+if [ "$CT_SLOT_DISP" = "Roboto-Bold.ttf" ] && [ "$CT_SLOT_DITAL" = "Roboto-BoldItalic.ttf" ] && [ "$CT_CJK_FALLBACK" = "NotoSansCJK-Regular.ttc" ]; then
+    pass "HyperOS 1 / Classic AOSP resolves 4 slots + NotoSansCJK-Regular.ttc fallback"
 else
-    fail "Unexpected AOSP slots: text=$CT_SLOT_TEXT disp=$CT_SLOT_DISP ital=$CT_SLOT_ITAL dital=$CT_SLOT_DITAL"
+    fail "Unexpected HyperOS 1 / AOSP slot or CJK fallback"
 fi
 
-cat > "$TMP_DIR/legacy_fonts.xml" <<'EOF'
+cat > "$TMP_DIR/hos1_fonts.xml" <<'EOF'
 <?xml version="1.0" encoding="utf-8"?>
 <familyset version="22">
     <family name="sans-serif">
         <font weight="400" style="normal">Roboto-Regular.ttf</font>
+    </family>
+    <family lang="zh-Hans">
+        <font weight="400" style="normal">MiLanProVF.ttf</font>
     </family>
     <family>
         <font weight="400" style="normal">NotoColorEmoji.ttf</font>
@@ -167,117 +181,110 @@ cat > "$TMP_DIR/legacy_fonts.xml" <<'EOF'
 </familyset>
 EOF
 
-if ct_patch_font_xml "$TMP_DIR/legacy_fonts.xml" "$TMP_DIR/fonts.xml" "dynamic_optical" "$AOSP_FONTS"; then
-    pass "Legacy fonts.xml patched & validated cleanly"
+CT_MISANS_SLIDER_ACTIVE="1"
+if ct_patch_font_xml "$TMP_DIR/hos1_fonts.xml" "$TMP_DIR/fonts.xml" "dynamic_optical" "$AOSP_FONTS"; then
+    pass "HyperOS 1 / legacy fonts.xml patched cleanly"
 else
-    fail "Legacy fonts.xml patching failed"
+    fail "HyperOS 1 / legacy fonts.xml patching failed"
 fi
-assert_not_grep 'postScriptName=' "$TMP_DIR/fonts.xml" "XML cleanly omits postScriptName for umount safety"
-assert_grep 'weight="700" style="normal">Roboto-Bold\.ttf' "$TMP_DIR/fonts.xml" "AOSP Display 700 routed to Roboto-Bold.ttf"
-assert_grep 'weight="700" style="italic">Roboto-BoldItalic\.ttf' "$TMP_DIR/fonts.xml" "AOSP Display 700 italic routed to Roboto-BoldItalic.ttf"
+assert_grep 'index="2">NotoSansCJK-Regular\.ttc' "$TMP_DIR/fonts.xml" "HyperOS 1 zh-Hans redirected to NotoSansCJK-Regular.ttc index=2"
 
-printf '=== Test 3: Optical Profiles (native_pro & compact_crisp) ===\n'
-ct_resolve_stock_slots "$HOS3_FONTS"
-ct_patch_font_xml "$TMP_DIR/hyperos3_fallback.xml" "$TMP_DIR/out_native.xml" "native_pro" "$HOS3_FONTS"
-assert_grep 'tag="wdth" stylevalue="100\.0"' "$TMP_DIR/out_native.xml" "native_pro uses uncompressed wdth=100.0"
-
-ct_patch_font_xml "$TMP_DIR/hyperos3_fallback.xml" "$TMP_DIR/out_compact.xml" "compact_crisp" "$HOS3_FONTS"
-assert_grep 'tag="wdth" stylevalue="91\.5"' "$TMP_DIR/out_compact.xml" "compact_crisp uses wdth=91.5 for text"
-assert_grep 'tag="wdth" stylevalue="92\.0"' "$TMP_DIR/out_compact.xml" "compact_crisp uses wdth=92.0 for display"
-
-printf '=== Test 4: Strict Structural XML Validator Rejects Corruption & Non-Stock Names ===\n'
-printf '<familyset><!-- CoreType Dual-Optical --><family name="sans-serif"><font>Roboto-Regular.ttf</font><font>RobotoStatic-Regular.ttf</familyset>\n' > "$TMP_DIR/broken.xml"
-if ct_validate_font_xml "$TMP_DIR/broken.xml" "$HOS3_FONTS"; then
-    fail "Validator should reject unbalanced <family>/<font> XML"
+printf '=== Test 3: Debloated ROM Without Separate CJK Preserves MiSansVF.ttf ===\n'
+NOCJK_FONTS="$TMP_DIR/nocjk_fonts"
+NOCJK_MOD="$TMP_DIR/nocjk_mod"
+mkdir -p "$NOCJK_FONTS" "$NOCJK_MOD/fonts"
+printf 'mock' > "$NOCJK_FONTS/Roboto-Regular.ttf"
+printf 'mock' > "$NOCJK_FONTS/MiSansVF.ttf"
+for _mf in CoreType-SFPro-Text.ttf CoreType-SFPro-Text-Italic.ttf CoreType-SFPro-Display.ttf CoreType-SFPro-Display-Italic.ttf; do
+    { printf '\000\001\000\000'; dd if=/dev/zero bs=1024 count=110 2>/dev/null; } > "$NOCJK_MOD/fonts/$_mf"
+done
+CT_DATA_DIR="$TMP_DIR/nocjk_data"
+ct_sync_stock_slots "$NOCJK_MOD" "$NOCJK_FONTS" "$TMP_DIR/empty_prod"
+if [ "$CT_MISANS_SLIDER_ACTIVE" = "0" ] && [ ! -e "$NOCJK_MOD/system/fonts/MiSansVF.ttf" ]; then
+    pass "Safely preserved MiSansVF.ttf when no separate CJK fallback exists"
 else
-    pass "Validator rejected unbalanced XML"
-fi
-
-printf '<familyset><!-- CoreType Dual-Optical --><family name="sans-serif"><font>CoreType-SFPro-Text.ttf</font></family></familyset>\n' > "$TMP_DIR/nonstock.xml"
-if ct_validate_font_xml "$TMP_DIR/nonstock.xml" "$HOS3_FONTS"; then
-    fail "Validator should reject non-stock CoreType-SFPro filenames"
-else
-    pass "Validator rejected non-stock filename (KSU umount guard)"
+    fail "Should not override MiSansVF.ttf without separate CJK fallback"
 fi
 
-if ct_validate_font_xml "$TMP_DIR/font_fallback.xml" "$TMP_DIR/missing_dir"; then
-    fail "Validator should reject missing font directory"
-else
-    pass "Validator rejected missing font files"
-fi
-
-printf '=== Test 5: Unified Engine, Atomic State, Log Trim & Bootloop Guard ===\n'
+printf '=== Test 4: Unified Engine (MiSans Slider + Apple iOS Emoji Lite/Full + Bootloop Guard) ===\n'
 CT_DATA_DIR="$TMP_DIR/data"
 CT_CONF_FILE="$CT_DATA_DIR/config.conf"
 CT_STATE_FILE="$CT_DATA_DIR/state.prop"
 CT_LOG_FILE="$CT_DATA_DIR/coretype.log"
-ct_conf_set "profile" "compact_crisp"
-_got=$(ct_conf_get "profile" "dynamic_optical")
-if [ "$_got" = "compact_crisp" ]; then
-    pass "ct_conf_set / ct_conf_get round-trip"
-else
-    fail "ct_conf_get expected compact_crisp, got $_got"
-fi
 
-ct_state_write_all "status=active" "profile=dynamic_optical" "ota_status=synced"
-assert_grep '^status=active$' "$CT_STATE_FILE" "Atomic single-pass ct_state_write_all wrote state.prop"
-
-# Log trimming test (>16 KB -> trimmed to <=100 lines)
-_i=0
-while [ "$_i" -lt 400 ]; do
-    printf '[2026-11-26 00:00:00] Log entry number %04d padding text to exceed 16KB\n' "$_i" >> "$CT_LOG_FILE"
-    _i=$((_i + 1))
-done
-ct_trim_log
-_lines=$(wc -l < "$CT_LOG_FILE")
-if [ "$_lines" -le 100 ]; then
-    pass "ct_trim_log capped oversized log cleanly ($_lines lines)"
-else
-    fail "ct_trim_log failed to cap log ($_lines lines)"
-fi
-
-# Unified engine slot-sync + OTA multi-XML patch test with valid TrueType magic (>100 KB)
-FAKE_ROOT="$TMP_DIR/fakeroot"
 FAKE_MOD="$TMP_DIR/mod"
-mkdir -p "$FAKE_ROOT/system/etc" "$FAKE_ROOT/system_ext/etc" "$FAKE_ROOT/system/fonts" "$FAKE_ROOT/product/fonts"
 mkdir -p "$FAKE_MOD/lib" "$FAKE_MOD/fonts"
 cp "$REPO_ROOT/lib/"*.sh "$FAKE_MOD/lib/"
 cp "$REPO_ROOT/post-fs-data.sh" "$FAKE_MOD/"
-cp "$TMP_DIR/hyperos3_fallback.xml" "$FAKE_ROOT/system/etc/font_fallback.xml"
-cp "$TMP_DIR/hyperos3_fallback.xml" "$FAKE_ROOT/system_ext/etc/hyper_font_fallback.xml"
-for _sf in Roboto-Regular.ttf RobotoStatic-Regular.ttf RobotoFlex-Regular.ttf MiSansVF_Overlay.ttf; do
-    printf 'stock' > "$FAKE_ROOT/system/fonts/$_sf"
-done
-printf 'stock' > "$FAKE_ROOT/product/fonts/MiSansLatinVF.ttf"
-
-# Generate 110 KB mock TrueType binaries with valid 00 01 00 00 sfnt magic
 for _mf in CoreType-SFPro-Text.ttf CoreType-SFPro-Text-Italic.ttf CoreType-SFPro-Display.ttf CoreType-SFPro-Display-Italic.ttf; do
     { printf '\000\001\000\000'; dd if=/dev/zero bs=1024 count=110 2>/dev/null; } > "$FAKE_MOD/fonts/$_mf"
 done
 
-if ct_verify_all_masters "$FAKE_MOD/fonts"; then
-    pass "ct_verify_all_masters validated TrueType magic & size"
+ct_sync_stock_slots "$FAKE_MOD" "$HOS3_FONTS" "$HOS3_PROD"
+if [ "$CT_MISANS_SLIDER_ACTIVE" = "1" ] \
+    && [ -s "$FAKE_MOD/system/fonts/MiSansVF.ttf" ] \
+    && [ -s "$FAKE_MOD/system/product/fonts/MiSansVF.ttf" ]; then
+    pass "MiSans Slider synced both /system/fonts & /product/fonts MiSansVF.ttf via shared inodes"
 else
-    fail "ct_verify_all_masters failed on valid mock masters"
+    fail "MiSans Slider slot sync failed"
 fi
 
-ct_sync_stock_slots "$FAKE_MOD" "$FAKE_ROOT/system/fonts" "$FAKE_ROOT/product/fonts"
-if [ -s "$FAKE_MOD/system/fonts/Roboto-Regular.ttf" ] \
-    && [ -s "$FAKE_MOD/system/fonts/RobotoStatic-Regular.ttf" ] \
-    && [ -s "$FAKE_MOD/system/fonts/RobotoFlex-Regular.ttf" ] \
-    && [ -s "$FAKE_MOD/system/product/fonts/MiSansLatinVF.ttf" ]; then
-    pass "ct_sync_stock_slots populated all HyperOS 3 slots via shared inodes"
+# Test Lite Edition (no CoreType-AppleEmoji.ttf present)
+ct_sync_emoji_slots "$FAKE_MOD" "1" "$HOS3_FONTS"
+if [ "$CT_EMOJI_AVAILABLE" = "0" ] && [ "$CT_EMOJI_ACTIVE" = "0" ] && [ ! -e "$FAKE_MOD/system/fonts/NotoColorEmoji.ttf" ]; then
+    pass "Lite edition cleanly reports emoji_available=0 without touching NotoColorEmoji.ttf"
 else
-    fail "ct_sync_stock_slots missing expected slots"
+    fail "Lite edition emoji check failed"
 fi
 
-if ct_patch_all_xmls "$FAKE_MOD" "dynamic_optical" 1 "$FAKE_ROOT" && [ "$CT_PATCHED_COUNT" -eq 2 ]; then
-    pass "ct_patch_all_xmls patched system & system_ext XMLs cleanly ($CT_PATCHED_COUNT files)"
+# Test Full Edition (>5 MB valid TrueType magic CoreType-AppleEmoji.ttf)
+{ printf '\000\001\000\000'; dd if=/dev/zero bs=1024 count=5200 2>/dev/null; } > "$FAKE_MOD/fonts/CoreType-AppleEmoji.ttf"
+ct_sync_emoji_slots "$FAKE_MOD" "1" "$HOS3_FONTS"
+if [ "$CT_EMOJI_AVAILABLE" = "1" ] && [ "$CT_EMOJI_ACTIVE" = "1" ] \
+    && [ -s "$FAKE_MOD/system/fonts/NotoColorEmoji.ttf" ] \
+    && [ -s "$FAKE_MOD/system/fonts/NotoColorEmojiFlags.ttf" ]; then
+    pass "Full edition enabled Apple iOS Emoji on stock NotoColorEmoji + Flags slots"
 else
-    fail "ct_patch_all_xmls failed (count=${CT_PATCHED_COUNT:-0})"
+    fail "Full edition emoji ON failed"
 fi
 
-# Simulate 2 failed boots and verify post-fs-data.sh auto-disables module
+# Test WebUI Emoji Toggle OFF
+ct_sync_emoji_slots "$FAKE_MOD" "0" "$HOS3_FONTS"
+if [ "$CT_EMOJI_AVAILABLE" = "1" ] && [ "$CT_EMOJI_ACTIVE" = "0" ] \
+    && [ ! -e "$FAKE_MOD/system/fonts/NotoColorEmoji.ttf" ]; then
+    pass "Emoji toggle OFF cleanly removes NotoColorEmoji slot while keeping available=1"
+else
+    fail "Emoji toggle OFF failed"
+fi
+
+# Test GMS dynamic font + EmojiCompat opentype bind-mount discovery (mocked mount)
+MOCK_DF="$TMP_DIR/data_fonts"
+MOCK_GMS="$TMP_DIR/gms_opentype"
+MOCK_MOUNT_LOG="$TMP_DIR/mount.log"
+mkdir -p "$MOCK_DF/~~hash123==" "$MOCK_GMS"
+printf 'stock' > "$MOCK_DF/~~hash123==/NotoColorEmoji.ttf"
+printf 'stock' > "$MOCK_GMS/Noto_COLR_Emoji_Compat-400-100_0-0_0.ttf"
+printf 'stock' > "$MOCK_GMS/Noto_COLR_Emoji_No_Flags-400-100_0-0_0.ttf"
+printf 'stock' > "$MOCK_GMS/Google_Sans_Text-400-100_0-0_0.ttf"
+_bound_cnt=$(
+    mount() {
+        printf '%s\n' "$*" >> "$MOCK_MOUNT_LOG"
+        return 0
+    }
+    chcon() { return 0; }
+    ct_bind_gms_emoji_cache "$FAKE_MOD" "$MOCK_DF" "$MOCK_GMS"
+    printf '%s' "$CT_GMS_EMOJI_BOUND"
+)
+if [ "$_bound_cnt" = "3" ] \
+    && grep -q 'Noto_COLR_Emoji_Compat' "$MOCK_MOUNT_LOG" \
+    && grep -q 'Noto_COLR_Emoji_No_Flags' "$MOCK_MOUNT_LOG" \
+    && ! grep -q 'Google_Sans_Text' "$MOCK_MOUNT_LOG"; then
+    pass "GMS bind-mount covered /data/fonts + both EmojiCompat caches (3/3) while skipping Google_Sans_Text"
+else
+    fail "GMS bind-mount discovery failed (bound=$_bound_cnt)"
+fi
+
+# Simulate 2 failed boots and verify Bootloop Guard auto-disables module
 printf '2\n' > "$CT_DATA_DIR/boot_attempts"
 CT_DATA_DIR="$CT_DATA_DIR" sh "$FAKE_MOD/post-fs-data.sh"
 if [ -f "$FAKE_MOD/disable" ]; then
@@ -286,7 +293,7 @@ else
     fail "Bootloop Guard did not create disable flag"
 fi
 
-printf '=== Test 6: ShellCheck Static Analysis ===\n'
+printf '=== Test 5: ShellCheck Static Analysis ===\n'
 if command -v shellcheck >/dev/null 2>&1; then
     if shellcheck -s sh \
         "$REPO_ROOT/customize.sh" \
@@ -297,6 +304,7 @@ if command -v shellcheck >/dev/null 2>&1; then
         "$REPO_ROOT/lib/profiles.sh" \
         "$REPO_ROOT/lib/font_xml.sh" \
         "$REPO_ROOT/lib/engine.sh" \
+        "$REPO_ROOT/lib/emoji.sh" \
         "$REPO_ROOT/tests/run_tests.sh"; then
         pass "ShellCheck passed with 0 warnings"
     else

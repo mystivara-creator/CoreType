@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# CoreType — KernelSU-Umount-Safe, OTA-Aware Zero-Bootloop Installer
+# CoreType — Universal HyperOS 1–4 & Android 12–16 Installer (KernelSU-Umount-Safe, OTA-Aware)
 
 # shellcheck disable=SC2034
 SKIPUNZIP=0
@@ -12,6 +12,8 @@ SKIPUNZIP=0
 . "$MODPATH/lib/font_xml.sh"
 # shellcheck disable=SC1091
 . "$MODPATH/lib/engine.sh"
+# shellcheck disable=SC1091
+. "$MODPATH/lib/emoji.sh"
 
 ct_ui_print() {
     if command -v ui_print >/dev/null 2>&1; then
@@ -23,7 +25,7 @@ ct_ui_print() {
 
 ct_ui_print " "
 ct_ui_print "============================================="
-ct_ui_print "  CoreType — Dual-Optical SF Pro v1.0.0"
+ct_ui_print "  CoreType — Dual-Optical SF Pro v1.1.0"
 ct_ui_print "  by Mystivara | Zero LSPosed"
 ct_ui_print "============================================="
 
@@ -45,12 +47,18 @@ ct_load_profile "$ACTIVE_PROFILE"
 ct_conf_set "profile" "$CT_PROFILE"
 ct_conf_set "applied_profile" "$CT_PROFILE"
 
+EMOJI_ENABLED=$(ct_conf_get "emoji_enabled" "1")
+[ "$EMOJI_ENABLED" = "0" ] || EMOJI_ENABLED="1"
+ct_conf_set "emoji_enabled" "$EMOJI_ENABLED"
+ct_conf_set "applied_emoji" "$EMOJI_ENABLED"
+
 # Record current ROM fingerprint for automatic HyperOS/Android OTA re-sync
 BUILD_FP=$(ct_get_fingerprint)
 [ -n "$BUILD_FP" ] && ct_conf_set "build_fingerprint" "$BUILD_FP"
 
-# 2. Allocate KernelSU-Umount-Safe Stock Slots (zero non-stock filenames in XML)
+# 2. Allocate KernelSU-Umount-Safe Stock Slots + Universal HyperOS MiSans Slider
 ct_sync_stock_slots "$MODPATH" "/system/fonts" "/product/fonts"
+ct_sync_emoji_slots "$MODPATH" "$EMOJI_ENABLED" "/system/fonts"
 
 ct_ui_print "- Profile: $CT_PROFILE_LABEL ($CT_PROFILE)"
 ct_ui_print "- KernelSU-Umount-Safe Stock Slots (shared inode):"
@@ -58,6 +66,22 @@ ct_ui_print "  Text    (opsz 17) -> $CT_SLOT_TEXT"
 ct_ui_print "  Display (opsz 28) -> $CT_SLOT_DISP"
 ct_ui_print "  Italic  (opsz 17) -> $CT_SLOT_ITAL"
 ct_ui_print "  DispIt  (opsz 28) -> $CT_SLOT_DITAL"
+
+if [ "$CT_MISANS_SLIDER_ACTIVE" = "1" ]; then
+    ct_ui_print "- HyperOS MiSans + Weight Slider: ENABLED (CJK safe via $CT_CJK_FALLBACK)"
+else
+    ct_ui_print "- HyperOS MiSans Slider: N/A or preserved (AOSP / no separate CJK fallback)"
+fi
+
+if [ "$CT_EMOJI_AVAILABLE" = "1" ]; then
+    if [ "$CT_EMOJI_ACTIVE" = "1" ]; then
+        ct_ui_print "- Edition: FULL | Apple iOS Emoji: ENABLED (GMS-aware)"
+    else
+        ct_ui_print "- Edition: FULL | Apple iOS Emoji: OFF (toggle anytime in WebUI)"
+    fi
+else
+    ct_ui_print "- Edition: LITE (Dual-Optical SF Pro only)"
+fi
 
 # 3. Snapshot stock XMLs and emit strictly validated Dual-Optical XMLs
 if ! ct_patch_all_xmls "$MODPATH" "$CT_PROFILE" 0 ""; then
@@ -69,7 +93,7 @@ ct_ui_print "- Patched $CT_PATCHED_COUNT system font XML(s) (100% ROM fallbacks 
 if [ -s /data/system/theme/fonts/Roboto-Regular.ttf ]; then
     ct_ui_print " "
     ct_ui_print "! Notice: Custom Xiaomi Theme font detected in /data/system/theme/fonts/."
-    ct_ui_print "  Select 'Default' in Settings -> Display -> Font after rebooting."
+    ct_ui_print "  Select 'Default' or 'MiSans' in Settings -> Display -> Font after rebooting."
 fi
 
 set_perm_recursive "$MODPATH" 0 0 0755 0644
@@ -87,11 +111,15 @@ ct_state_write_all \
     "slot_text=$CT_SLOT_TEXT" \
     "slot_disp=$CT_SLOT_DISP" \
     "slot_ital=$CT_SLOT_ITAL" \
+    "misans_slider=$CT_MISANS_SLIDER_ACTIVE" \
+    "cjk_fallback=${CT_CJK_FALLBACK:-none}" \
+    "emoji_available=$CT_EMOJI_AVAILABLE" \
+    "emoji_active=$CT_EMOJI_ACTIVE" \
     "ota_status=synced" \
     "optical_engine=dual_master_gpos_trak_umount_safe" \
     "bootloop_guard=armed"
 
-ct_log "Installed CoreType v1.0.0 (profile=$CT_PROFILE xmls=$CT_PATCHED_COUNT slots=$CT_SLOT_TEXT/$CT_SLOT_DISP/$CT_SLOT_ITAL)"
+ct_log "Installed CoreType v1.1.0 (profile=$CT_PROFILE xmls=$CT_PATCHED_COUNT misans=$CT_MISANS_SLIDER_ACTIVE emoji=$CT_EMOJI_ACTIVE/$CT_EMOJI_AVAILABLE)"
 
 ct_ui_print "- Self-Healing Bootloop Guard: ARMED"
 ct_ui_print "- OTA Auto-Resync: ENABLED"

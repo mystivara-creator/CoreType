@@ -1,6 +1,6 @@
 id=coretype
 name=CoreType
-version=v1.0.0
-versionCode=100
+version=v1.1.0
+versionCode=110
 author=Mystivara
-description=Dual-Optical San Francisco Pro typography engine for HyperOS & Android. Dedicated SF Pro Display (opsz 28) & Text (opsz 17) variable masters, Apple iOS tracking baked via GPOS, centered badge metrics, and self-healing Bootloop Guard. Zero LSPosed.
+description=Dual-Optical San Francisco Pro & Apple iOS Emoji engine for HyperOS 1–4 & Android 12–16. Dedicated SF Pro Display/Text masters, Apple GPOS tracking, live HyperOS MiSans weight slider, GMS-aware iOS Emoji toggle, KernelSU-umount-safe, OTA auto-resync & Bootloop Guard. Zero LSPosed.
