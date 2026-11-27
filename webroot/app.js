@@ -36,6 +36,9 @@
     });
   }
 
+  const VALID_PROFILES = ["dynamic_optical", "native_pro", "compact_crisp"];
+  let appliedProfile = "dynamic_optical";
+
   async function loadState() {
     const [stRes, cfRes] = await Promise.all([
       execShell(`cat ${STATE_FILE} 2>/dev/null`),
@@ -46,11 +49,14 @@
     if (stRes.code === -1) {
       badge.textContent = "Preview";
       badge.className = "badge badge-muted";
+      appliedProfile = "dynamic_optical";
       selectButton("dynamic_optical");
       document.getElementById("kv-profile").textContent = "iOS Optical Dynamic";
+      document.getElementById("kv-mounted").textContent = "4/4 Dual-Optical VF";
+      document.getElementById("kv-slots").textContent = "Roboto · Static · Flex";
       document.getElementById("kv-xml").textContent = "font_fallback.xml";
-      document.getElementById("kv-wdth").textContent = "91.0 / 89.0";
-      document.getElementById("kv-mounted").textContent = "Preview Mode";
+      document.getElementById("kv-wdth").textContent = "96.5 / 97.0";
+      document.getElementById("kv-guard").textContent = "Healthy · OTA Synced";
       return;
     }
 
@@ -58,28 +64,35 @@
     const cf = parseProps(cfRes.out);
 
     const isActive = st.status === "active";
-    badge.textContent = isActive ? "Active" : "Degraded";
+    badge.textContent = isActive ? "Active" : st.status === "safe_disabled" ? "Safe Mode" : "Degraded";
     badge.className = "badge " + (isActive ? "badge-active" : "badge-warn");
 
     const wanted = cf.profile || st.profile || "dynamic_optical";
-    const applied = cf.applied_profile || st.profile || "dynamic_optical";
+    appliedProfile = cf.applied_profile || st.profile || "dynamic_optical";
     selectButton(wanted);
 
-    document.getElementById("kv-profile").textContent = st.profile_label || applied;
+    document.getElementById("kv-profile").textContent = st.profile_label || appliedProfile;
+    document.getElementById("kv-mounted").textContent =
+      st.font_mounted === "1" ? "Dual-Optical VF (Shared Inode)" : "Not Mounted";
+    const shortSlot = (name) => (name || "—").replace(/-Regular\.ttf$|\.ttf$/g, "");
+    document.getElementById("kv-slots").textContent =
+      st.slot_text ? `${shortSlot(st.slot_text)} · ${shortSlot(st.slot_disp)} · ${shortSlot(st.slot_ital)}` : "—";
     document.getElementById("kv-xml").textContent = st.xml_active || "none";
     document.getElementById("kv-wdth").textContent =
       st.wdth_text && st.wdth_disp ? `${st.wdth_text} / ${st.wdth_disp}` : "—";
-    document.getElementById("kv-mounted").textContent =
-      st.font_mounted === "1" ? "Mounted (SF Pro VF)" : "Not Mounted";
+    const guardText = st.bootloop_guard === "healthy" ? "Healthy" : (st.bootloop_guard || "Armed");
+    const otaText = st.ota_status === "resynced" ? "OTA Resynced" : "OTA Synced";
+    document.getElementById("kv-guard").textContent = `${guardText} · ${otaText}`;
 
-    document.getElementById("reboot-banner").classList.toggle("hidden", wanted === applied);
+    document.getElementById("reboot-banner").classList.toggle("hidden", wanted === appliedProfile);
   }
 
   async function setProfile(profileId) {
+    if (!VALID_PROFILES.includes(profileId)) return;
     selectButton(profileId);
     const cmd = `mkdir -p /data/adb/coretype && if [ -f ${CONF_FILE} ]; then awk -F= -v v='${profileId}' 'BEGIN{d=0} $1=="profile"{print "profile="v;d=1;next} {print} END{if(!d)print "profile="v}' ${CONF_FILE} > ${CONF_FILE}.tmp && mv ${CONF_FILE}.tmp ${CONF_FILE}; else printf 'profile=%s\\n' '${profileId}' > ${CONF_FILE}; fi`;
     await execShell(cmd);
-    document.getElementById("reboot-banner").classList.remove("hidden");
+    document.getElementById("reboot-banner").classList.toggle("hidden", profileId === appliedProfile);
   }
 
   document.querySelectorAll(".profile-item").forEach((btn) => {

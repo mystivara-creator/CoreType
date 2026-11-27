@@ -1,33 +1,36 @@
 # CoreType
 
-**Optical-aware San Francisco Pro typography engine for HyperOS & Android.**  
+**Dual-Optical San Francisco Pro typography engine for HyperOS & Android.**  
 Part of the **Mystivara Ecosystem** (`CoreFlow` · `CoreSurface` · `CoreType`) — **100% Standalone, Zero LSPosed**.
 
 ---
 
-## Why Raw SF Pro Looks "Flat & Wide" on Android
+## Why Raw SF Pro Looks "Dead & Wide" on Android
 
-Installing raw Apple `SF-Pro.ttf` on Android/HyperOS usually feels lifeless and bloats UI layouts for three real typographic reasons:
+Installing raw Apple `SF-Pro.ttf` on Android/HyperOS always feels lifeless and bloats UI layouts for four real typographic reasons:
 
-1. **Wrong Default Optical Size (`opsz`):** Apple's `SF-Pro.ttf` defaults to `opsz=28.0` (Display) instead of `17.0` (Text), making headers and body text look flat and uniform.
-2. **Wider Advance Widths:** At `wdth=100`, SF Pro Text averages **~15% wider** than Android Roboto / HyperOS MiSans — causing Status Bar, Quick Settings, and button labels to wrap or truncate (`...`).
-3. **20 MB Apple PUA Bloat:** Raw `SF-Pro.ttf` ships ~35,900 glyphs (mostly Apple-only SF Symbols in Private Use Area) that waste RAM and slow down Zygote font loading.
+1. **Android Ignores Apple's `trak` Table:** Apple's CoreText dynamically tightens San Francisco's letter-spacing using an AAT `trak` table (`-40` to `-52` UPM at 16–17pt UI Text). Android's HarfBuzz/Minikin **completely ignores `trak`**, making every line render ~12–15% too loose and bloated.
+2. **Wrong Default Optical Size (`opsz`):** Raw `SF-Pro.ttf` defaults to `opsz=28.0` (Display) rather than `17.0` (Text), flattening header-vs-body hierarchy.
+3. **Upright vs Italic Width Mismatch:** Apple's `SF-Pro-Italic.ttf` lacks a `wdth` axis, so width-hacking only the upright font leaves italics visibly wider than upright text.
+4. **40 MB Apple PUA Bloat:** Raw `SF-Pro.ttf` + `SF-Pro-Italic.ttf` pack ~71,000 glyphs (mostly Apple-only SF Symbols in Private Use Area) that waste RAM and slow Zygote boot.
 
-## How CoreType Solves It
+## How CoreType Achieves True Native iOS Typography
 
-- **Progressive Optical Size (`opsz`) Curve:** Dynamically maps system weights in `font_fallback.xml` & `fonts.xml`:
-  - **Body / Chat / Notifications (`wght 350–400`):** `opsz=17.0` (**SF Pro Text** — open, crisp, effortless reading)
-  - **UI Labels / Tabs (`wght 500`):** `opsz=20.0` (smooth Text → Display transition)
-  - **Headers / Settings Titles / App Bars (`wght 600–700`):** `opsz=26.0–28.0` (**SF Pro Display** — tighter tracking, unmistakable iOS punch)
-  - **Lockscreen Clock / Hero Display (`wght 100–300`, `800–950`):** `opsz=26.0–28.0` (**SF Pro Display**)
-- **Apple-Native Optical Width Calibration (`wdth`):** Uses SF Pro's own hand-drawn `wdth` variable axis (never artificial horizontal stretching) calibrated to Android/HyperOS UI grids (`91 / 89` default).
-- **Android Baseline Metrics Alignment:** Calibrates `hhea` & `OS/2` (`1900 / -500`) so icons, badges, and status bar pills align pixel-accurately.
-- **Lean & Fast:** Strips Apple-only PUA SF Symbols during CI build (`~20 MB → ~1.5 MB`), keeping full Latin, Extended Latin, Vietnamese, Greek, Cyrillic, Math, Currency, Punctuation, and OpenType features.
-- **Full HyperOS 2/3/4 & AOSP Compatibility:** Dynamically patches `font_fallback.xml` & `fonts.xml` at flash time while preserving **100% of device fallbacks** (Arabic, CJK, Devanagari, Emoji, Symbols).
+- **Dual Optical Variable Masters (`opsz=17` Text & `opsz=28` Display):**
+  - `CoreType-SFPro-Text.ttf` & `CoreType-SFPro-Text-Italic.ttf` (`wght 350–500`): Pure **SF Pro Text** (`opsz=17`) with Apple's **−46 UPM** iOS Text tracking baked non-destructively into OpenType `GPOS kern` (`SinglePos`, applied right after Apple's native `PairPos` kerning).
+  - `CoreType-SFPro-Display.ttf` & `CoreType-SFPro-Display-Italic.ttf` (`wght 100–300` Clocks/Hero, `wght 600–950` Headers/Titles): Pure **SF Pro Display** (`opsz=28`) with Apple's **−26 UPM** Display tracking baked into `GPOS kern`.
+  - **HyperOS `mipro` Weight Calibration:** Compensates for HyperOS's +100/+200 `mipro-demibold` (`700 → wght 590`) and `mipro-semibold` (`800 → wght 680`) weight offsets so section headers look crisp and refined like native iOS.
+  - **100% Pure Apple Glyph Shapes & Ultra-Lean `gvar`:** Prunes unused Apple PUA symbols, desktop-only stylistic sets, and unused `wdth < 75 / > 100` extremes — shrinking `gvar` by **~75%** and cutting per-app `mmap` RAM while preserving **0-unit identical HarfBuzz shaping**, Apple's centered `09:41` clock colon (`calt`), and tabular numerals (`tnum`).
+- **Zero-Bootloop, Zero-Daemon & KernelSU-Umount-Safe Architecture:**
+  - **100% Stock-Slot Mapping (Zero Non-Stock Filenames in XML):** Maps Dual-Optical SF Pro masters strictly onto existing stock `/system/fonts/` slots (`Roboto-Regular.ttf`, `RobotoStatic-Regular.ttf`, `RobotoFlex-Regular.ttf`, etc.). Even when KernelSU `umount modules` hides mounts inside Gboard or banking apps, every referenced stock filename still exists on disk — eliminating `minikin::Font::prepareFont` `SIGSEGV` crashes completely.
+  - **Automatic ROM / HyperOS OTA Resync:** Detects `ro.build.fingerprint` changes in `post-fs-data` (before mounts & Zygote) and automatically refreshes stock XML snapshots, stock slots, and patches — zero re-flashing needed after OTA updates.
+  - **Self-Healing Bootloop Guard:** Automatically disables the module (`disable` flag) if 2 consecutive boots ever fail to reach `sys.boot_completed=1`.
+  - **Zero Background Daemon (0 KB Persistent RAM):** `service.sh` verifies health, writes `state.prop` in one atomic pass, trims logs `< 16 KB`, and exits immediately.
+  - **Shared-Inode Hardlinks & 100% Fallback Preservation:** Uses real `0644` hardlinks (no symlinks) to share Linux kernel RAM page cache; never touches `MiSansVF.ttf` (CJK), Arabic, Indic, `MiClock*.otf`, or `NotoColorEmoji.ttf`.
 - **WebUI Optical Profile Switcher (KSU / APatch / MMRL):**
-  - `iOS Optical Dynamic` *(Recommended)*
-  - `iOS Native Pro`
-  - `iOS Compact Crisp`
+  - `iOS Optical Dynamic` *(Recommended)* — pure shapes (`wdth 96.5 / 97.0`) + Apple GPOS `trak`
+  - `iOS Native Pro` — 100% uncompressed Apple width (`wdth 100.0`) + Apple GPOS `trak`
+  - `iOS Compact Crisp` — tighter optical width (`wdth 91.5 / 92.0`) for ultra-dense UI
 
 ---
 

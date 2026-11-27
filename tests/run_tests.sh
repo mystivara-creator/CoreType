@@ -1,5 +1,5 @@
 #!/bin/sh
-# CoreType — Automated POSIX Test Suite
+# CoreType — Automated POSIX Test Suite (KernelSU-Umount-Safe Dual-Optical + OTA Engine)
 
 set -eu
 
@@ -45,14 +45,34 @@ assert_not_grep() {
 . "$REPO_ROOT/lib/profiles.sh"
 # shellcheck disable=SC1091
 . "$REPO_ROOT/lib/font_xml.sh"
+# shellcheck disable=SC1091
+. "$REPO_ROOT/lib/engine.sh"
 
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-printf '=== Test 1: HyperOS 3 font_fallback.xml Optical Patching ===\n'
+# Simulate HyperOS 3 stock /system/fonts/ (ONLY Roboto-Regular, RobotoStatic-Regular, RobotoFlex-Regular)
+HOS3_FONTS="$TMP_DIR/hos3_fonts"
+mkdir -p "$HOS3_FONTS"
+for _mf in Roboto-Regular.ttf RobotoStatic-Regular.ttf RobotoFlex-Regular.ttf; do
+    printf 'mockfont' > "$HOS3_FONTS/$_mf"
+done
+
+printf '=== Test 1: HyperOS 3 KernelSU-Umount-Safe Stock-Slot Allocation ===\n'
+ct_resolve_stock_slots "$HOS3_FONTS"
+if [ "$CT_SLOT_TEXT" = "Roboto-Regular.ttf" ] \
+    && [ "$CT_SLOT_DISP" = "RobotoStatic-Regular.ttf" ] \
+    && [ "$CT_SLOT_ITAL" = "RobotoFlex-Regular.ttf" ] \
+    && [ "$CT_SLOT_DITAL" = "RobotoFlex-Regular.ttf" ]; then
+    pass "HyperOS 3 slots mapped strictly onto existing stock files (zero non-stock filenames)"
+else
+    fail "Unexpected HyperOS 3 slots: text=$CT_SLOT_TEXT disp=$CT_SLOT_DISP ital=$CT_SLOT_ITAL dital=$CT_SLOT_DITAL"
+fi
+
 cat > "$TMP_DIR/hyperos3_fallback.xml" <<'EOF'
 <?xml version="1.0" encoding="utf-8"?>
 <familyset>
+    <!-- <family name="sans-serif"><font>CommentedOut.ttf</font></family> -->
     <family name="sans-serif">
         <font weight="100" style="normal" postScriptName="MiSansVF">MiSansVF_Overlay.ttf
             <axis tag="wght" stylevalue="150" />
@@ -72,6 +92,14 @@ cat > "$TMP_DIR/hyperos3_fallback.xml" <<'EOF'
     <family name="sans-serif-condensed">
         <font weight="400" style="normal">RobotoCondensed-Regular.ttf</font>
     </family>
+    <family name="roboto-flex">
+        <font weight="400" style="normal">RobotoFlex-Regular.ttf</font>
+    </family>
+    <family>
+        <font supportedAxes="wght,ital">Roboto-Regular.ttf
+            <axis tag="wdth" stylevalue="100" />
+        </font>
+    </family>
     <family lang="ar">
         <font weight="400" style="normal">MiSansArabicVF.ttf</font>
     </family>
@@ -84,38 +112,105 @@ cat > "$TMP_DIR/hyperos3_fallback.xml" <<'EOF'
 </familyset>
 EOF
 
-if ct_patch_font_xml "$TMP_DIR/hyperos3_fallback.xml" "$TMP_DIR/out_hos3.xml" "dynamic_optical"; then
-    pass "HyperOS 3 XML patched cleanly"
+if ct_patch_font_xml "$TMP_DIR/hyperos3_fallback.xml" "$TMP_DIR/nested/etc/font_fallback.xml" "dynamic_optical" "$HOS3_FONTS"; then
+    pass "HyperOS 3 font_fallback.xml patched & validated cleanly (auto-created nested dir)"
+    cp "$TMP_DIR/nested/etc/font_fallback.xml" "$TMP_DIR/font_fallback.xml"
 else
-    fail "HyperOS 3 XML patching failed"
+    fail "HyperOS 3 font_fallback.xml patching failed"
 fi
 
-assert_grep 'CoreType-SFPro\.ttf' "$TMP_DIR/out_hos3.xml" "Injected CoreType-SFPro.ttf"
-assert_grep 'CoreType-SFPro-Italic\.ttf' "$TMP_DIR/out_hos3.xml" "Injected CoreType-SFPro-Italic.ttf"
-assert_grep 'tag="opsz" stylevalue="17\.0"' "$TMP_DIR/out_hos3.xml" "Body text mapped to opsz=17.0 (SF Pro Text)"
-assert_grep 'tag="opsz" stylevalue="26\.0"' "$TMP_DIR/out_hos3.xml" "Semibold header mapped to opsz=26.0 (SF Pro Display)"
-assert_grep 'tag="opsz" stylevalue="28\.0"' "$TMP_DIR/out_hos3.xml" "Bold/Clock mapped to opsz=28.0 (SF Pro Display)"
-assert_grep 'tag="wdth" stylevalue="91\.0"' "$TMP_DIR/out_hos3.xml" "Calibrated body width wdth=91.0"
-assert_grep 'tag="wdth" stylevalue="89\.0"' "$TMP_DIR/out_hos3.xml" "Calibrated display width wdth=89.0"
-assert_grep 'tag="wdth" stylevalue="78\.0"' "$TMP_DIR/out_hos3.xml" "Native optical condensed wdth=78.0"
-assert_not_grep 'MiSansVF_Overlay\.ttf' "$TMP_DIR/out_hos3.xml" "Replaced MiSansVF_Overlay.ttf in sans-serif"
-assert_not_grep 'MiSansLatinVF\.ttf' "$TMP_DIR/out_hos3.xml" "Replaced MiSansLatinVF.ttf in Latin family"
-assert_grep 'MiSansArabicVF\.ttf' "$TMP_DIR/out_hos3.xml" "Preserved Arabic fallback"
-assert_grep 'MiSansJapaneseVF\.ttf' "$TMP_DIR/out_hos3.xml" "Preserved Japanese fallback"
-assert_grep 'NotoColorEmoji\.ttf' "$TMP_DIR/out_hos3.xml" "Preserved NotoColorEmoji fallback"
+assert_not_grep 'CoreType-SFPro' "$TMP_DIR/font_fallback.xml" "Zero non-stock CoreType-SFPro filenames in XML (prevents KSU umount SIGSEGV)"
+assert_grep 'CoreType Dual-Optical' "$TMP_DIR/font_fallback.xml" "Contains CoreType Dual-Optical XML marker"
+assert_grep 'weight="400" style="normal">Roboto-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Body 400 routed to Text slot (Roboto-Regular.ttf)"
+assert_grep 'weight="400" style="italic">RobotoFlex-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Body 400 italic routed to Italic slot (RobotoFlex-Regular.ttf)"
+assert_grep 'weight="600" style="normal">RobotoStatic-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Header 600 routed to Display slot (RobotoStatic-Regular.ttf)"
+assert_grep 'weight="700" style="italic">RobotoFlex-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Header 700 italic routed to Italic slot (RobotoFlex-Regular.ttf)"
+assert_grep 'weight="100" style="normal">RobotoStatic-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Lockscreen clock 100 routed to Display slot (RobotoStatic-Regular.ttf)"
+assert_not_grep 'supportedAxes="wght,ital"' "$TMP_DIR/font_fallback.xml" "Eliminated HyperOS 3 duplicate Roboto-Regular fallback overwrite"
+assert_grep 'tag="wdth" stylevalue="96\.5"' "$TMP_DIR/font_fallback.xml" "Calibrated Text width wdth=96.5"
+assert_grep 'tag="wdth" stylevalue="97\.0"' "$TMP_DIR/font_fallback.xml" "Calibrated Display width wdth=97.0"
+assert_grep 'tag="wght" stylevalue="590"' "$TMP_DIR/font_fallback.xml" "Calibrated mipro-demibold (700) to iOS Semibold wght=590"
+assert_grep 'tag="wght" stylevalue="680"' "$TMP_DIR/font_fallback.xml" "Calibrated mipro-semibold (800) to iOS Bold wght=680"
+assert_grep 'tag="wdth" stylevalue="82\.0"' "$TMP_DIR/font_fallback.xml" "Optical condensed width wdth=82.0"
+assert_not_grep 'MiSansVF_Overlay\.ttf' "$TMP_DIR/font_fallback.xml" "Replaced MiSansVF_Overlay.ttf in sans-serif"
+assert_not_grep 'MiSansLatinVF\.ttf' "$TMP_DIR/font_fallback.xml" "Replaced MiSansLatinVF.ttf in Latin family"
+assert_grep 'MiSansArabicVF\.ttf' "$TMP_DIR/font_fallback.xml" "Preserved Arabic fallback"
+assert_grep 'MiSansJapaneseVF\.ttf' "$TMP_DIR/font_fallback.xml" "Preserved Japanese fallback"
+assert_grep 'NotoColorEmoji\.ttf' "$TMP_DIR/font_fallback.xml" "Preserved NotoColorEmoji fallback"
+assert_grep 'CommentedOut\.ttf' "$TMP_DIR/font_fallback.xml" "Preserved commented-out <family> block verbatim"
 
-printf '=== Test 2: Optical Profiles (native_pro & compact_crisp) ===\n'
-ct_patch_font_xml "$TMP_DIR/hyperos3_fallback.xml" "$TMP_DIR/out_native.xml" "native_pro"
-assert_grep 'tag="wdth" stylevalue="98\.0"' "$TMP_DIR/out_native.xml" "native_pro uses wdth=98.0 for text"
-assert_grep 'tag="wdth" stylevalue="96\.0"' "$TMP_DIR/out_native.xml" "native_pro uses wdth=96.0 for display"
+printf '=== Test 2: Classic AOSP Stock-Slot Allocation (4 Distinct Slots) ===\n'
+AOSP_FONTS="$TMP_DIR/aosp_fonts"
+mkdir -p "$AOSP_FONTS"
+for _mf in Roboto-Regular.ttf Roboto-Bold.ttf Roboto-Italic.ttf Roboto-BoldItalic.ttf; do
+    printf 'mockfont' > "$AOSP_FONTS/$_mf"
+done
+ct_resolve_stock_slots "$AOSP_FONTS"
+if [ "$CT_SLOT_TEXT" = "Roboto-Regular.ttf" ] \
+    && [ "$CT_SLOT_DISP" = "Roboto-Bold.ttf" ] \
+    && [ "$CT_SLOT_ITAL" = "Roboto-Italic.ttf" ] \
+    && [ "$CT_SLOT_DITAL" = "Roboto-BoldItalic.ttf" ]; then
+    pass "Classic AOSP resolves 4 distinct stock slots cleanly"
+else
+    fail "Unexpected AOSP slots: text=$CT_SLOT_TEXT disp=$CT_SLOT_DISP ital=$CT_SLOT_ITAL dital=$CT_SLOT_DITAL"
+fi
 
-ct_patch_font_xml "$TMP_DIR/hyperos3_fallback.xml" "$TMP_DIR/out_compact.xml" "compact_crisp"
-assert_grep 'tag="wdth" stylevalue="86\.0"' "$TMP_DIR/out_compact.xml" "compact_crisp uses wdth=86.0 for text"
-assert_grep 'tag="wdth" stylevalue="84\.5"' "$TMP_DIR/out_compact.xml" "compact_crisp uses wdth=84.5 for display"
+cat > "$TMP_DIR/legacy_fonts.xml" <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<familyset version="22">
+    <family name="sans-serif">
+        <font weight="400" style="normal">Roboto-Regular.ttf</font>
+    </family>
+    <family>
+        <font weight="400" style="normal">NotoColorEmoji.ttf</font>
+    </family>
+</familyset>
+EOF
 
-printf '=== Test 3: Config Helpers ===\n'
+if ct_patch_font_xml "$TMP_DIR/legacy_fonts.xml" "$TMP_DIR/fonts.xml" "dynamic_optical" "$AOSP_FONTS"; then
+    pass "Legacy fonts.xml patched & validated cleanly"
+else
+    fail "Legacy fonts.xml patching failed"
+fi
+assert_not_grep 'postScriptName=' "$TMP_DIR/fonts.xml" "XML cleanly omits postScriptName for umount safety"
+assert_grep 'weight="700" style="normal">Roboto-Bold\.ttf' "$TMP_DIR/fonts.xml" "AOSP Display 700 routed to Roboto-Bold.ttf"
+assert_grep 'weight="700" style="italic">Roboto-BoldItalic\.ttf' "$TMP_DIR/fonts.xml" "AOSP Display 700 italic routed to Roboto-BoldItalic.ttf"
+
+printf '=== Test 3: Optical Profiles (native_pro & compact_crisp) ===\n'
+ct_resolve_stock_slots "$HOS3_FONTS"
+ct_patch_font_xml "$TMP_DIR/hyperos3_fallback.xml" "$TMP_DIR/out_native.xml" "native_pro" "$HOS3_FONTS"
+assert_grep 'tag="wdth" stylevalue="100\.0"' "$TMP_DIR/out_native.xml" "native_pro uses uncompressed wdth=100.0"
+
+ct_patch_font_xml "$TMP_DIR/hyperos3_fallback.xml" "$TMP_DIR/out_compact.xml" "compact_crisp" "$HOS3_FONTS"
+assert_grep 'tag="wdth" stylevalue="91\.5"' "$TMP_DIR/out_compact.xml" "compact_crisp uses wdth=91.5 for text"
+assert_grep 'tag="wdth" stylevalue="92\.0"' "$TMP_DIR/out_compact.xml" "compact_crisp uses wdth=92.0 for display"
+
+printf '=== Test 4: Strict Structural XML Validator Rejects Corruption & Non-Stock Names ===\n'
+printf '<familyset><!-- CoreType Dual-Optical --><family name="sans-serif"><font>Roboto-Regular.ttf</font><font>RobotoStatic-Regular.ttf</familyset>\n' > "$TMP_DIR/broken.xml"
+if ct_validate_font_xml "$TMP_DIR/broken.xml" "$HOS3_FONTS"; then
+    fail "Validator should reject unbalanced <family>/<font> XML"
+else
+    pass "Validator rejected unbalanced XML"
+fi
+
+printf '<familyset><!-- CoreType Dual-Optical --><family name="sans-serif"><font>CoreType-SFPro-Text.ttf</font></family></familyset>\n' > "$TMP_DIR/nonstock.xml"
+if ct_validate_font_xml "$TMP_DIR/nonstock.xml" "$HOS3_FONTS"; then
+    fail "Validator should reject non-stock CoreType-SFPro filenames"
+else
+    pass "Validator rejected non-stock filename (KSU umount guard)"
+fi
+
+if ct_validate_font_xml "$TMP_DIR/font_fallback.xml" "$TMP_DIR/missing_dir"; then
+    fail "Validator should reject missing font directory"
+else
+    pass "Validator rejected missing font files"
+fi
+
+printf '=== Test 5: Unified Engine, Atomic State, Log Trim & Bootloop Guard ===\n'
 CT_DATA_DIR="$TMP_DIR/data"
 CT_CONF_FILE="$CT_DATA_DIR/config.conf"
+CT_STATE_FILE="$CT_DATA_DIR/state.prop"
+CT_LOG_FILE="$CT_DATA_DIR/coretype.log"
 ct_conf_set "profile" "compact_crisp"
 _got=$(ct_conf_get "profile" "dynamic_optical")
 if [ "$_got" = "compact_crisp" ]; then
@@ -124,7 +219,74 @@ else
     fail "ct_conf_get expected compact_crisp, got $_got"
 fi
 
-printf '=== Test 4: ShellCheck Static Analysis ===\n'
+ct_state_write_all "status=active" "profile=dynamic_optical" "ota_status=synced"
+assert_grep '^status=active$' "$CT_STATE_FILE" "Atomic single-pass ct_state_write_all wrote state.prop"
+
+# Log trimming test (>16 KB -> trimmed to <=100 lines)
+_i=0
+while [ "$_i" -lt 400 ]; do
+    printf '[2026-11-26 00:00:00] Log entry number %04d padding text to exceed 16KB\n' "$_i" >> "$CT_LOG_FILE"
+    _i=$((_i + 1))
+done
+ct_trim_log
+_lines=$(wc -l < "$CT_LOG_FILE")
+if [ "$_lines" -le 100 ]; then
+    pass "ct_trim_log capped oversized log cleanly ($_lines lines)"
+else
+    fail "ct_trim_log failed to cap log ($_lines lines)"
+fi
+
+# Unified engine slot-sync + OTA multi-XML patch test with valid TrueType magic (>100 KB)
+FAKE_ROOT="$TMP_DIR/fakeroot"
+FAKE_MOD="$TMP_DIR/mod"
+mkdir -p "$FAKE_ROOT/system/etc" "$FAKE_ROOT/system_ext/etc" "$FAKE_ROOT/system/fonts" "$FAKE_ROOT/product/fonts"
+mkdir -p "$FAKE_MOD/lib" "$FAKE_MOD/fonts"
+cp "$REPO_ROOT/lib/"*.sh "$FAKE_MOD/lib/"
+cp "$REPO_ROOT/post-fs-data.sh" "$FAKE_MOD/"
+cp "$TMP_DIR/hyperos3_fallback.xml" "$FAKE_ROOT/system/etc/font_fallback.xml"
+cp "$TMP_DIR/hyperos3_fallback.xml" "$FAKE_ROOT/system_ext/etc/hyper_font_fallback.xml"
+for _sf in Roboto-Regular.ttf RobotoStatic-Regular.ttf RobotoFlex-Regular.ttf MiSansVF_Overlay.ttf; do
+    printf 'stock' > "$FAKE_ROOT/system/fonts/$_sf"
+done
+printf 'stock' > "$FAKE_ROOT/product/fonts/MiSansLatinVF.ttf"
+
+# Generate 110 KB mock TrueType binaries with valid 00 01 00 00 sfnt magic
+for _mf in CoreType-SFPro-Text.ttf CoreType-SFPro-Text-Italic.ttf CoreType-SFPro-Display.ttf CoreType-SFPro-Display-Italic.ttf; do
+    { printf '\000\001\000\000'; dd if=/dev/zero bs=1024 count=110 2>/dev/null; } > "$FAKE_MOD/fonts/$_mf"
+done
+
+if ct_verify_all_masters "$FAKE_MOD/fonts"; then
+    pass "ct_verify_all_masters validated TrueType magic & size"
+else
+    fail "ct_verify_all_masters failed on valid mock masters"
+fi
+
+ct_sync_stock_slots "$FAKE_MOD" "$FAKE_ROOT/system/fonts" "$FAKE_ROOT/product/fonts"
+if [ -s "$FAKE_MOD/system/fonts/Roboto-Regular.ttf" ] \
+    && [ -s "$FAKE_MOD/system/fonts/RobotoStatic-Regular.ttf" ] \
+    && [ -s "$FAKE_MOD/system/fonts/RobotoFlex-Regular.ttf" ] \
+    && [ -s "$FAKE_MOD/system/product/fonts/MiSansLatinVF.ttf" ]; then
+    pass "ct_sync_stock_slots populated all HyperOS 3 slots via shared inodes"
+else
+    fail "ct_sync_stock_slots missing expected slots"
+fi
+
+if ct_patch_all_xmls "$FAKE_MOD" "dynamic_optical" 1 "$FAKE_ROOT" && [ "$CT_PATCHED_COUNT" -eq 2 ]; then
+    pass "ct_patch_all_xmls patched system & system_ext XMLs cleanly ($CT_PATCHED_COUNT files)"
+else
+    fail "ct_patch_all_xmls failed (count=${CT_PATCHED_COUNT:-0})"
+fi
+
+# Simulate 2 failed boots and verify post-fs-data.sh auto-disables module
+printf '2\n' > "$CT_DATA_DIR/boot_attempts"
+CT_DATA_DIR="$CT_DATA_DIR" sh "$FAKE_MOD/post-fs-data.sh"
+if [ -f "$FAKE_MOD/disable" ]; then
+    pass "Bootloop Guard auto-disabled module after 2 failed boots"
+else
+    fail "Bootloop Guard did not create disable flag"
+fi
+
+printf '=== Test 6: ShellCheck Static Analysis ===\n'
 if command -v shellcheck >/dev/null 2>&1; then
     if shellcheck -s sh \
         "$REPO_ROOT/customize.sh" \
@@ -134,6 +296,7 @@ if command -v shellcheck >/dev/null 2>&1; then
         "$REPO_ROOT/lib/common.sh" \
         "$REPO_ROOT/lib/profiles.sh" \
         "$REPO_ROOT/lib/font_xml.sh" \
+        "$REPO_ROOT/lib/engine.sh" \
         "$REPO_ROOT/tests/run_tests.sh"; then
         pass "ShellCheck passed with 0 warnings"
     else

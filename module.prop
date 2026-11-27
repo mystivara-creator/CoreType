@@ -2,5 +2,5 @@ id=coretype
 name=CoreType
 version=v1.0.0
 versionCode=100
-author=mystivara
-description=Optical-aware San Francisco Pro typography engine for HyperOS & Android. Dynamic Header/Body optical sizing (opsz), calibrated UI width & vertical metrics, full HyperOS MiSansVF + Roboto integration. Zero LSPosed.
+author=Mystivara
+description=Dual-Optical San Francisco Pro typography engine for HyperOS & Android. Dedicated SF Pro Display (opsz 28) & Text (opsz 17) variable masters, Apple iOS tracking baked via GPOS, centered badge metrics, and self-healing Bootloop Guard. Zero LSPosed.

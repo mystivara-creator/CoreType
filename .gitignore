@@ -4,11 +4,13 @@ dist/
 *.zip
 *.dmg
 *.pkg
+fonts/*.ttf
 system/fonts/*.ttf
 system/fonts/*.otf
 system/product/fonts/*.ttf
 system/etc/font_fallback.xml
 system/etc/fonts.xml
+system/system_ext/etc/*.xml
 __pycache__/
 *.pyc
 .DS_Store
