@@ -35,11 +35,16 @@ SF_PRO_DMG_URL = "https://devimages-cdn.apple.com/design/resources/download/SF-P
 # Vertical metrics calibrated to exact 4:1 ascent:descent parity (UPM 2048, total 2460 = 1.201x):
 # Matches HyperOS MiSansTCVF (960:-240) & NotoSansCJK line-height cleanly so mixed Latin + CJK
 # runs, circular notification badges, and tabular clocks (09:41) align with zero vertical clipping.
+# Also pins head.yMax / head.yMin to stock Android Roboto's exact bbox (2160 / -555) so tall
+# Apple SF Symbols never inflate Android StaticLayout includeFontPadding (notification cards &
+# circular Settings badges).
 ANDROID_ASCENT = 1968
 ANDROID_DESCENT = -492
 ANDROID_LINE_GAP = 0
 ANDROID_WIN_ASCENT = 1968
 ANDROID_WIN_DESCENT = 492
+ANDROID_BBOX_YMAX = 2160
+ANDROID_BBOX_YMIN = -555
 
 # 2D (opsz × wght) Apple HIG CoreText tracking rules evaluated top-to-bottom (first match wins):
 # - Text (opsz=17): snug -44 UPM for Regular body (wght < 480), smoothly breathing open across
@@ -593,7 +598,13 @@ def bake_gpos_feature_variations(
 
 
 def calibrate_vertical_metrics(font: "TTFont") -> None:
-    """Align hhea & OS/2 vertical metrics to exact 4:1 HyperOS MiSans / CJK line-height parity."""
+    """
+    Align hhea, OS/2, and head vertical metrics to HyperOS/Android parity:
+      - hhea & OS/2: exact 4:1 ascent:descent (1968 / -492, lineGap=0, USE_TYPO_METRICS)
+      - head.yMax / yMin: pinned to stock Android Roboto's bbox (2160 / -555) with
+        recalcBBoxes=False so preserving 100% of Apple SF Symbols never inflates Android's
+        FontMetricsInt.top/bottom (includeFontPadding) on notifications & circular badges.
+    """
     hhea = font["hhea"]
     hhea.ascent = ANDROID_ASCENT
     hhea.descent = ANDROID_DESCENT
@@ -607,6 +618,11 @@ def calibrate_vertical_metrics(font: "TTFont") -> None:
     os2.usWinDescent = ANDROID_WIN_DESCENT
     # Set USE_TYPO_METRICS (bit 7) so Android/Skia honors Typo metrics consistently
     os2.fsSelection |= 1 << 7
+
+    head = font["head"]
+    head.yMax = ANDROID_BBOX_YMAX
+    head.yMin = ANDROID_BBOX_YMIN
+    font.recalcBBoxes = False
 
 
 RIBBI_SUBFAMILIES = {"Regular", "Italic", "Bold", "Bold Italic"}
@@ -750,7 +766,8 @@ def audit_built_fonts(out_dir: Path) -> None:
         if not fpath.is_file():
             raise RuntimeError(f"Missing expected built font: {fpath}")
         with TTFont(str(fpath)) as font:
-            upm = font["head"].unitsPerEm
+            head = font["head"]
+            upm = head.unitsPerEm
             hhea = font["hhea"]
             os2 = font["OS/2"]
 
@@ -759,6 +776,9 @@ def audit_built_fonts(out_dir: Path) -> None:
             )
             assert hhea.descent == ANDROID_DESCENT == os2.sTypoDescender == -os2.usWinDescent, (
                 f"Descent mismatch in {fname}: hhea={hhea.descent} typo={os2.sTypoDescender} win={os2.usWinDescent}"
+            )
+            assert head.yMax == ANDROID_BBOX_YMAX and head.yMin == ANDROID_BBOX_YMIN, (
+                f"head bbox inflated in {fname}: yMax={head.yMax} yMin={head.yMin} (expected {ANDROID_BBOX_YMAX}/{ANDROID_BBOX_YMIN})"
             )
             assert hhea.lineGap == 0 and os2.sTypoLineGap == 0, f"Non-zero lineGap in {fname}"
             assert (os2.fsSelection & (1 << 7)) != 0, f"USE_TYPO_METRICS bit missing in {fname}"
