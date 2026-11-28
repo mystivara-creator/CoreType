@@ -245,34 +245,85 @@ std::string unescape_mount_path(std::string_view raw) {
     return out;
 }
 
-std::unordered_set<std::string> load_active_mounts() {
-    constexpr size_t kMountInfoMaxBytes = 4U * 1024U * 1024U;
+bool is_relevant_mount_path(const Config& cfg, std::string_view p) {
+    if (!ends_with(p, ".ttf")) return false;
+    return starts_with(p, cfg.gms_files_root) ||
+           starts_with(p, cfg.data_fonts_root) ||
+           p.find("/com.google.android.gms/files/fonts/") != std::string_view::npos ||
+           p.find("/data/fonts/files/") != std::string_view::npos ||
+           (p.find("/com.facebook.") != std::string_view::npos &&
+            p.find("/app_ras_blobs/") != std::string_view::npos);
+}
+
+// Stream /proc/self/mountinfo line-by-line with a fixed 8 KB stack buffer (zero large heap
+// allocations -> keeps daemon_private_kb < 300 KB even when mountinfo exceeds 512 KB).
+std::unordered_set<std::string> load_active_mounts(const Config& cfg) {
     std::unordered_set<std::string> mounts;
-    std::string data = read_small_file("/proc/self/mountinfo", kMountInfoMaxBytes);
-    bool use_mountinfo = !data.empty();
+    int fd = ::open("/proc/self/mountinfo", O_RDONLY | O_CLOEXEC);
+    bool use_mountinfo = (fd >= 0);
     if (!use_mountinfo) {
-        data = read_small_file("/proc/mounts", kMountInfoMaxBytes);
+        fd = ::open("/proc/mounts", O_RDONLY | O_CLOEXEC);
+        if (fd < 0) return mounts;
     }
-    size_t start = 0;
-    while (start < data.size()) {
-        size_t end = data.find('\n', start);
-        if (end == std::string::npos) end = data.size();
-        std::string_view line(data.data() + start, end - start);
-        int target_field = use_mountinfo ? 4 : 1;
+
+    const int target_field = use_mountinfo ? 4 : 1;
+    std::string line;
+    line.reserve(512);
+    char buf[8192];
+
+    auto process_line = [&](std::string_view lv) {
         int field = 0;
         size_t i = 0;
-        while (i < line.size()) {
-            while (i < line.size() && line[i] == ' ') ++i;
+        while (i < lv.size()) {
+            while (i < lv.size() && lv[i] == ' ') ++i;
             size_t tok_start = i;
-            while (i < line.size() && line[i] != ' ') ++i;
+            while (i < lv.size() && lv[i] != ' ') ++i;
             if (field == target_field && i > tok_start) {
-                mounts.insert(unescape_mount_path(line.substr(tok_start, i - tok_start)));
+                std::string unescaped = unescape_mount_path(lv.substr(tok_start, i - tok_start));
+                if (is_relevant_mount_path(cfg, unescaped)) {
+                    mounts.insert(std::move(unescaped));
+                }
                 break;
             }
             ++field;
         }
-        start = end + 1;
+    };
+
+    for (;;) {
+        ssize_t n = ::read(fd, buf, sizeof(buf));
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (n == 0) break;
+
+        size_t pos = 0;
+        const size_t len = static_cast<size_t>(n);
+        while (pos < len) {
+            const char* nl = static_cast<const char*>(::memchr(buf + pos, '\n', len - pos));
+            if (nl != nullptr) {
+                const size_t chunk = static_cast<size_t>(nl - (buf + pos));
+                if (line.empty()) {
+                    process_line(std::string_view(buf + pos, chunk));
+                } else {
+                    line.append(buf + pos, chunk);
+                    process_line(line);
+                    line.clear();
+                }
+                pos += chunk + 1;
+            } else {
+                line.append(buf + pos, len - pos);
+                if (line.size() > 16384) {
+                    line.clear();
+                }
+                break;
+            }
+        }
     }
+    if (!line.empty()) {
+        process_line(line);
+    }
+    ::close(fd);
     return mounts;
 }
 
@@ -287,9 +338,12 @@ bool valid_apple_emoji_master(const std::string& path) {
 }
 
 void prepare_font_source(const std::string& path) {
+    static std::unordered_set<std::string> prepared;
+    if (prepared.find(path) != prepared.end()) return;
     if (!file_exists(path)) return;
     ::chmod(path.c_str(), 0644);
     (void)::setxattr(path.c_str(), "security.selinux", kSelinuxSystemFile, sizeof(kSelinuxSystemFile), 0);
+    prepared.insert(path);
 }
 
 bool is_latin_ui_gms_font(std::string_view base) {
@@ -475,7 +529,7 @@ SyncStats perform_sync(const Config& cfg) {
     const bool want_latin = (gms_latin_flag != "0");
     const bool want_emoji = (emoji_flag != "0");
 
-    std::unordered_set<std::string> mounted = load_active_mounts();
+    std::unordered_set<std::string> mounted = load_active_mounts(cfg);
 
     // Live-unmount any previously active GMS mounts when user toggles OFF in WebUI
     detach_disabled_mounts(cfg, want_latin, want_emoji, mounted);

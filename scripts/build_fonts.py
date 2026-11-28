@@ -324,6 +324,14 @@ def _build_tracking_lookup(font: "TTFont", track_units: int, space_track: int):
             # fusion (e.g. "Username" -> "Usemame") even with Android Accessibility Bold Text ON.
             delta = int(round(track_units * 0.50))
             x_place = int(round(delta / 2.0))
+        elif cp in (0x0066, 0x0192):
+            # Lowercase 'f' has a prominent right hook; 60% tracking keeps `ff`/`fi`/`fl`/`ft` crisp.
+            delta = int(round(track_units * 0.60))
+            x_place = int(round(delta / 2.0))
+        elif cp in (0x0074, 0x0163, 0x0165, 0x021B):
+            # Lowercase 't' has a right crossbar overhang; 70% tracking keeps `ti`/`tr`/`tt` clean.
+            delta = int(round(track_units * 0.70))
+            x_place = int(round(delta / 2.0))
         elif aw <= 450:
             # Narrow punctuation / thin stems (i, l, ., :, ;) -> gentler proportional tracking
             delta = int(round(track_units * 0.45))
@@ -715,6 +723,9 @@ def build_gms_static_instances(out_dir: Path) -> None:
         dst_path = out_dir / spec["out"]
         with TTFont(str(src_path)) as font:
             font = instantiateVariableFont(font, spec["coords"], inplace=True)
+            if "GPOS" in font and getattr(font["GPOS"].table, "FeatureVariations", None) is not None:
+                font["GPOS"].table.FeatureVariations = None
+                font["GPOS"].table.Version = 0x00010000
             calibrate_vertical_metrics(font)
             os2 = font["OS/2"]
             os2.usWeightClass = int(spec["weight_class"])

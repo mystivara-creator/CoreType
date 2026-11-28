@@ -179,7 +179,8 @@ ct_detect_xml_curve_mode() {
 # Dynamic Weight Curve Calculator:
 #   wght_out = clamp(base(slot, rom_curve) + contrast_delta(slot, contrast_mode) + tapered_bias(slot, weight_bias), 100, 950)
 # Usage: ct_calc_wght <slot_weight>
-ct_calc_wght() {
+# In-shell zero-fork calculator storing result in CT_WGHT_RESULT
+ct_calc_wght_val() {
     _slot="$1"
     _rom="${CT_ROM_CURVE:-hyperos_mipro}"
     _cm="${CT_CONTRAST_MODE:-balanced}"
@@ -250,109 +251,90 @@ ct_calc_wght() {
     _out=$((_base + _cdelta + _bdelta))
     [ "$_out" -lt 100 ] && _out=100
     [ "$_out" -gt 950 ] && _out=950
-    printf '%s' "$_out"
+    CT_WGHT_RESULT="$_out"
+}
+
+ct_calc_wght() {
+    ct_calc_wght_val "$1"
+    printf '%s' "$CT_WGHT_RESULT"
+}
+
+ct_precompute_weights() {
+    ct_calc_wght_val 100; CT_W100="$CT_WGHT_RESULT"
+    ct_calc_wght_val 200; CT_W200="$CT_WGHT_RESULT"
+    ct_calc_wght_val 300; CT_W300="$CT_WGHT_RESULT"
+    ct_calc_wght_val 350; CT_W350="$CT_WGHT_RESULT"
+    ct_calc_wght_val 400; CT_W400="$CT_WGHT_RESULT"
+    ct_calc_wght_val 500; CT_W500="$CT_WGHT_RESULT"
+    ct_calc_wght_val 600; CT_W600="$CT_WGHT_RESULT"
+    ct_calc_wght_val 700; CT_W700="$CT_WGHT_RESULT"
+    ct_calc_wght_val 800; CT_W800="$CT_WGHT_RESULT"
+    ct_calc_wght_val 900; CT_W900="$CT_WGHT_RESULT"
+    ct_calc_wght_val 950; CT_W950="$CT_WGHT_RESULT"
 }
 
 ct_emit_sans_serif_entries() {
     # Thin / Light (Lockscreen Clocks & Display Hero) -> SF Pro Display (opsz=28 + Display trak)
-    _w100=$(ct_calc_wght 100)
-    _w200=$(ct_calc_wght 200)
-    _w300=$(ct_calc_wght 300)
-    _w350=$(ct_calc_wght 350)
-    _w400=$(ct_calc_wght 400)
-    _w500=$(ct_calc_wght 500)
-    _w600=$(ct_calc_wght 600)
-    _w700=$(ct_calc_wght 700)
-    _w800=$(ct_calc_wght 800)
-    _w900=$(ct_calc_wght 900)
-    _w950=$(ct_calc_wght 950)
-
-    ct_emit_font_entry 100 normal display "$CT_WDTH_DISP" "$_w100"
-    ct_emit_font_entry 100 italic display "$CT_WDTH_DISP" "$_w100"
-    ct_emit_font_entry 200 normal display "$CT_WDTH_DISP" "$_w200"
-    ct_emit_font_entry 200 italic display "$CT_WDTH_DISP" "$_w200"
-    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP" "$_w300"
-    ct_emit_font_entry 300 italic display "$CT_WDTH_DISP" "$_w300"
+    ct_emit_font_entry 100 normal display "$CT_WDTH_DISP" "$CT_W100"
+    ct_emit_font_entry 100 italic display "$CT_WDTH_DISP" "$CT_W100"
+    ct_emit_font_entry 200 normal display "$CT_WDTH_DISP" "$CT_W200"
+    ct_emit_font_entry 200 italic display "$CT_WDTH_DISP" "$CT_W200"
+    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP" "$CT_W300"
+    ct_emit_font_entry 300 italic display "$CT_WDTH_DISP" "$CT_W300"
     # Body / Notes Editor / Chat / UI Labels -> SF Pro Text (opsz=17 + Text trak)
-    ct_emit_font_entry 350 normal text "$CT_WDTH_TEXT" "$_w350"
-    ct_emit_font_entry 400 normal text "$CT_WDTH_TEXT" "$_w400"
-    ct_emit_font_entry 400 italic text "$CT_WDTH_TEXT" "$_w400"
-    ct_emit_font_entry 500 normal text "$CT_WDTH_MID" "$_w500"
-    ct_emit_font_entry 500 italic text "$CT_WDTH_MID" "$_w500"
+    ct_emit_font_entry 350 normal text "$CT_WDTH_TEXT" "$CT_W350"
+    ct_emit_font_entry 400 normal text "$CT_WDTH_TEXT" "$CT_W400"
+    ct_emit_font_entry 400 italic text "$CT_WDTH_TEXT" "$CT_W400"
+    ct_emit_font_entry 500 normal text "$CT_WDTH_MID" "$CT_W500"
+    ct_emit_font_entry 500 italic text "$CT_WDTH_MID" "$CT_W500"
     # Headers / Section Labels / Bold -> SF Pro Display (opsz=28 + Display trak)
-    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP" "$_w600"
-    ct_emit_font_entry 600 italic display "$CT_WDTH_DISP" "$_w600"
-    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP" "$_w700"
-    ct_emit_font_entry 700 italic display "$CT_WDTH_DISP" "$_w700"
-    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP" "$_w800"
-    ct_emit_font_entry 800 italic display "$CT_WDTH_DISP" "$_w800"
-    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP" "$_w900"
-    ct_emit_font_entry 900 italic display "$CT_WDTH_DISP" "$_w900"
-    ct_emit_font_entry 950 normal display "$CT_WDTH_DISP" "$_w950"
+    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP" "$CT_W600"
+    ct_emit_font_entry 600 italic display "$CT_WDTH_DISP" "$CT_W600"
+    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP" "$CT_W700"
+    ct_emit_font_entry 700 italic display "$CT_WDTH_DISP" "$CT_W700"
+    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP" "$CT_W800"
+    ct_emit_font_entry 800 italic display "$CT_WDTH_DISP" "$CT_W800"
+    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP" "$CT_W900"
+    ct_emit_font_entry 900 italic display "$CT_WDTH_DISP" "$CT_W900"
+    ct_emit_font_entry 950 normal display "$CT_WDTH_DISP" "$CT_W950"
 }
 
 ct_emit_condensed_entries() {
-    _w300=$(ct_calc_wght 300)
-    _w400=$(ct_calc_wght 400)
-    _w500=$(ct_calc_wght 500)
-    _w600=$(ct_calc_wght 600)
-    _w700=$(ct_calc_wght 700)
-
-    ct_emit_font_entry 300 normal display "$CT_WDTH_COND" "$_w300"
-    ct_emit_font_entry 400 normal text "$CT_WDTH_COND" "$_w400"
-    ct_emit_font_entry 400 italic text "$CT_WDTH_COND" "$_w400"
-    ct_emit_font_entry 500 normal text "$CT_WDTH_COND" "$_w500"
-    ct_emit_font_entry 600 normal display "$CT_WDTH_COND" "$_w600"
-    ct_emit_font_entry 700 normal display "$CT_WDTH_COND" "$_w700"
-    ct_emit_font_entry 700 italic display "$CT_WDTH_COND" "$_w700"
+    ct_emit_font_entry 300 normal display "$CT_WDTH_COND" "$CT_W300"
+    ct_emit_font_entry 400 normal text "$CT_WDTH_COND" "$CT_W400"
+    ct_emit_font_entry 400 italic text "$CT_WDTH_COND" "$CT_W400"
+    ct_emit_font_entry 500 normal text "$CT_WDTH_COND" "$CT_W500"
+    ct_emit_font_entry 600 normal display "$CT_WDTH_COND" "$CT_W600"
+    ct_emit_font_entry 700 normal display "$CT_WDTH_COND" "$CT_W700"
+    ct_emit_font_entry 700 italic display "$CT_WDTH_COND" "$CT_W700"
 }
 
 ct_emit_display_entries() {
-    _w300=$(ct_calc_wght 300)
-    _w400=$(ct_calc_wght 400)
-    _w500=$(ct_calc_wght 500)
-    _w600=$(ct_calc_wght 600)
-    _w700=$(ct_calc_wght 700)
-    _w800=$(ct_calc_wght 800)
-    _w900=$(ct_calc_wght 900)
-
-    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP" "$_w300"
-    ct_emit_font_entry 400 normal display "$CT_WDTH_DISP" "$_w400"
-    ct_emit_font_entry 500 normal display "$CT_WDTH_DISP" "$_w500"
-    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP" "$_w600"
-    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP" "$_w700"
-    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP" "$_w800"
-    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP" "$_w900"
+    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP" "$CT_W300"
+    ct_emit_font_entry 400 normal display "$CT_WDTH_DISP" "$CT_W400"
+    ct_emit_font_entry 500 normal display "$CT_WDTH_DISP" "$CT_W500"
+    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP" "$CT_W600"
+    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP" "$CT_W700"
+    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP" "$CT_W800"
+    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP" "$CT_W900"
 }
 
 ct_emit_flex_entries() {
-    _w100=$(ct_calc_wght 100)
-    _w200=$(ct_calc_wght 200)
-    _w300=$(ct_calc_wght 300)
-    _w350=$(ct_calc_wght 350)
-    _w400=$(ct_calc_wght 400)
-    _w500=$(ct_calc_wght 500)
-    _w600=$(ct_calc_wght 600)
-    _w700=$(ct_calc_wght 700)
-    _w800=$(ct_calc_wght 800)
-    _w900=$(ct_calc_wght 900)
-    _w950=$(ct_calc_wght 950)
-
     # Graduated Apple CoreText optical ramp (Body 17 -> Medium 18 -> Title3 21 -> Title2 24 -> Display 28)
-    ct_emit_flex_font_entry 100 normal 28 "$CT_WDTH_DISP" "$_w100"
-    ct_emit_flex_font_entry 200 normal 28 "$CT_WDTH_DISP" "$_w200"
-    ct_emit_flex_font_entry 300 normal 24 "$CT_WDTH_DISP" "$_w300"
-    ct_emit_flex_font_entry 350 normal 17 "$CT_WDTH_TEXT" "$_w350"
-    ct_emit_flex_font_entry 400 normal 17 "$CT_WDTH_TEXT" "$_w400"
-    ct_emit_flex_font_entry 400 italic 17 "$CT_WDTH_TEXT" "$_w400"
-    ct_emit_flex_font_entry 500 normal 18 "$CT_WDTH_MID" "$_w500"
-    ct_emit_flex_font_entry 500 italic 18 "$CT_WDTH_MID" "$_w500"
-    ct_emit_flex_font_entry 600 normal 21 "$CT_WDTH_DISP" "$_w600"
-    ct_emit_flex_font_entry 700 normal 24 "$CT_WDTH_DISP" "$_w700"
-    ct_emit_flex_font_entry 700 italic 24 "$CT_WDTH_DISP" "$_w700"
-    ct_emit_flex_font_entry 800 normal 28 "$CT_WDTH_DISP" "$_w800"
-    ct_emit_flex_font_entry 900 normal 28 "$CT_WDTH_DISP" "$_w900"
-    ct_emit_flex_font_entry 950 normal 28 "$CT_WDTH_DISP" "$_w950"
+    ct_emit_flex_font_entry 100 normal 28 "$CT_WDTH_DISP" "$CT_W100"
+    ct_emit_flex_font_entry 200 normal 28 "$CT_WDTH_DISP" "$CT_W200"
+    ct_emit_flex_font_entry 300 normal 24 "$CT_WDTH_DISP" "$CT_W300"
+    ct_emit_flex_font_entry 350 normal 17 "$CT_WDTH_TEXT" "$CT_W350"
+    ct_emit_flex_font_entry 400 normal 17 "$CT_WDTH_TEXT" "$CT_W400"
+    ct_emit_flex_font_entry 400 italic 17 "$CT_WDTH_TEXT" "$CT_W400"
+    ct_emit_flex_font_entry 500 normal 18 "$CT_WDTH_MID" "$CT_W500"
+    ct_emit_flex_font_entry 500 italic 18 "$CT_WDTH_MID" "$CT_W500"
+    ct_emit_flex_font_entry 600 normal 21 "$CT_WDTH_DISP" "$CT_W600"
+    ct_emit_flex_font_entry 700 normal 24 "$CT_WDTH_DISP" "$CT_W700"
+    ct_emit_flex_font_entry 700 italic 24 "$CT_WDTH_DISP" "$CT_W700"
+    ct_emit_flex_font_entry 800 normal 28 "$CT_WDTH_DISP" "$CT_W800"
+    ct_emit_flex_font_entry 900 normal 28 "$CT_WDTH_DISP" "$CT_W900"
+    ct_emit_flex_font_entry 950 normal 28 "$CT_WDTH_DISP" "$CT_W950"
 }
 
 # Structural XML sanity check (prevents malformed XML or missing slot files from reaching Zygote)
@@ -453,6 +435,7 @@ ct_patch_font_xml() {
     [ -r "$_src" ] || return 1
     ct_load_profile "$_prof"
     ct_detect_xml_curve_mode "$_src"
+    ct_precompute_weights
     [ -n "${CT_SLOT_TEXT:-}" ] || ct_resolve_stock_slots "/system/fonts"
 
     mkdir -p "$(dirname "$_dst")" || return 1

@@ -856,5 +856,8 @@
     setupTabSliding();
     setupListeners();
     loadState();
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) refreshTelemetryOnly();
+    });
   });
 })();
