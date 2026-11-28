@@ -83,7 +83,7 @@ ct_export_diag() {
 
         printf '\n=== ACTIVE GMS/FONT MOUNTS & ANTI-DUPLICATION CHECK ===\n'
         if [ -r /proc/mounts ]; then
-            _mnt_lines=$(awk '$2 ~ /com\.google\.android\.gms\/files\/fonts|\/data\/fonts\/files\/|\/system\/fonts\/|\/product\/fonts\// { print $2 }' /proc/mounts 2>/dev/null | sort)
+            _mnt_lines=$(awk '$2 ~ /com\.google\.android\.gms\/files\/fonts|\/data\/fonts\/files\/|\/system\/fonts\/|\/product\/fonts\/|com\.facebook\.[^\/]+\/app_ras_blobs\// { print $2 }' /proc/mounts 2>/dev/null | sort)
             _total_m=0
             _uniq_m=0
             if [ -n "$_mnt_lines" ]; then

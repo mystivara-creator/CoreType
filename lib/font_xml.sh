@@ -338,17 +338,18 @@ ct_emit_flex_entries() {
     _w900=$(ct_calc_wght 900)
     _w950=$(ct_calc_wght 950)
 
+    # Graduated Apple CoreText optical ramp (Body 17 -> Medium 18 -> Title3 21 -> Title2 24 -> Display 28)
     ct_emit_flex_font_entry 100 normal 28 "$CT_WDTH_DISP" "$_w100"
     ct_emit_flex_font_entry 200 normal 28 "$CT_WDTH_DISP" "$_w200"
-    ct_emit_flex_font_entry 300 normal 28 "$CT_WDTH_DISP" "$_w300"
+    ct_emit_flex_font_entry 300 normal 24 "$CT_WDTH_DISP" "$_w300"
     ct_emit_flex_font_entry 350 normal 17 "$CT_WDTH_TEXT" "$_w350"
     ct_emit_flex_font_entry 400 normal 17 "$CT_WDTH_TEXT" "$_w400"
     ct_emit_flex_font_entry 400 italic 17 "$CT_WDTH_TEXT" "$_w400"
-    ct_emit_flex_font_entry 500 normal 17 "$CT_WDTH_MID" "$_w500"
-    ct_emit_flex_font_entry 500 italic 17 "$CT_WDTH_MID" "$_w500"
-    ct_emit_flex_font_entry 600 normal 28 "$CT_WDTH_DISP" "$_w600"
-    ct_emit_flex_font_entry 700 normal 28 "$CT_WDTH_DISP" "$_w700"
-    ct_emit_flex_font_entry 700 italic 28 "$CT_WDTH_DISP" "$_w700"
+    ct_emit_flex_font_entry 500 normal 18 "$CT_WDTH_MID" "$_w500"
+    ct_emit_flex_font_entry 500 italic 18 "$CT_WDTH_MID" "$_w500"
+    ct_emit_flex_font_entry 600 normal 21 "$CT_WDTH_DISP" "$_w600"
+    ct_emit_flex_font_entry 700 normal 24 "$CT_WDTH_DISP" "$_w700"
+    ct_emit_flex_font_entry 700 italic 24 "$CT_WDTH_DISP" "$_w700"
     ct_emit_flex_font_entry 800 normal 28 "$CT_WDTH_DISP" "$_w800"
     ct_emit_flex_font_entry 900 normal 28 "$CT_WDTH_DISP" "$_w900"
     ct_emit_flex_font_entry 950 normal 28 "$CT_WDTH_DISP" "$_w950"

@@ -768,7 +768,7 @@ bool parse_args(int argc, char** argv, Config& cfg) {
         } else if (arg == "--no-fbe-wait") {
             cfg.skip_fbe_wait = true;
         } else if (arg == "--version") {
-            std::puts("coretype-watchd 1.2.1");
+            std::puts("coretype-watchd 1.2.2");
             return false;
         } else if (arg == "--help") {
             std::puts("Usage: coretype-watchd [--moddir PATH] [--datadir PATH] [--rundir PATH] [--oneshot] [--no-fbe-wait]");

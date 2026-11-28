@@ -98,6 +98,7 @@ else
     # Verify mapped stock slots exist before mount; repair from masters if missing
     ct_load_slots
     _slot_missing=0
+    [ -s "$CT_DATA_DIR/slots.conf" ] || _slot_missing=1
     for _req in "$CT_SLOT_TEXT" "$CT_SLOT_DISP" "$CT_SLOT_FLEX" "$CT_SLOT_ITAL" "$CT_SLOT_DITAL"; do
         if [ -z "$_req" ] || [ ! -s "$MODDIR/system/fonts/$_req" ]; then
             _slot_missing=1

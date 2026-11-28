@@ -127,7 +127,7 @@ ct_write_state() {
         "gms_emoji_bound=${CT_GMS_EMOJI_BOUND:-0}" \
         "gms_watcher=$_w_mode" \
         "ota_status=$_ota_state" \
-        "optical_engine=coretext_parity_continuous_opsz_epoll" \
+        "optical_engine=coretext_parity_2d_fv_epoll" \
         "bootloop_guard=$_guard_state"
 }
 

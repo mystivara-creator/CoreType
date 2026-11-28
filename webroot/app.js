@@ -25,6 +25,7 @@
   let appliedEmoji = true;
   let wantedEmoji = true;
   let emojiAvailable = false;
+  let installPendingReboot = false;
   let toastTimer = null;
   let confWriteChain = Promise.resolve();
   let suppressTabClickUntil = 0;
@@ -430,6 +431,7 @@
   // Note: Universal GMS App Fonts is Instant Live-Apply (SIGUSR1) — intentionally excluded from Reboot banner!
   function updateRebootBanner() {
     const dirty =
+      installPendingReboot ||
       wantedProfile !== appliedProfile ||
       wantedBias !== appliedBias ||
       wantedContrast !== appliedContrast ||
@@ -545,7 +547,15 @@
     const tm = parseProps(tmRes.out);
 
     const isActive = st.status === "active";
-    badge.textContent = isActive ? "Active" : st.status === "safe_disabled" ? "Safe Mode" : "Degraded";
+    const isPendingReboot = st.status === "pending_reboot";
+    installPendingReboot = isPendingReboot;
+    badge.textContent = isActive
+      ? "Active"
+      : isPendingReboot
+        ? "Pending Reboot"
+        : st.status === "safe_disabled"
+          ? "Safe Mode"
+          : "Degraded";
     badge.className = "status-pill " + (isActive ? "badge-active" : "badge-warn");
 
     wantedProfile = VALID_PROFILES.includes(cf.profile)

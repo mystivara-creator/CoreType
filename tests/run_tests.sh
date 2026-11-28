@@ -144,7 +144,9 @@ assert_grep 'CoreType Dual-Optical' "$TMP_DIR/font_fallback.xml" "Contains CoreT
 assert_grep 'weight="400" style="normal">Roboto-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Body 400 routed to Text slot"
 assert_not_grep 'style="italic">Roboto-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Omitted fake upright italic on HyperOS 3/4 so Minikin synthesizes true oblique italics"
 assert_grep 'weight="400" style="normal">RobotoFlex-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "roboto-flex routed to dedicated continuous-opsz Flex slot"
-assert_grep 'tag="opsz" stylevalue="17"' "$TMP_DIR/font_fallback.xml" "roboto-flex declares continuous opsz=17 for Text weights"
+assert_grep 'tag="opsz" stylevalue="17"' "$TMP_DIR/font_fallback.xml" "roboto-flex declares continuous opsz=17 for Body weights"
+assert_grep 'tag="opsz" stylevalue="21"' "$TMP_DIR/font_fallback.xml" "roboto-flex declares graduated opsz=21 for Semi-Display (600)"
+assert_grep 'tag="opsz" stylevalue="24"' "$TMP_DIR/font_fallback.xml" "roboto-flex declares graduated opsz=24 for Title2 (700)"
 assert_grep 'tag="opsz" stylevalue="28"' "$TMP_DIR/font_fallback.xml" "roboto-flex declares continuous opsz=28 for Display weights"
 assert_grep 'weight="600" style="normal">RobotoStatic-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Header 600 routed to Display slot"
 assert_not_grep 'supportedAxes="wght,ital"' "$TMP_DIR/font_fallback.xml" "Eliminated duplicate Roboto-Regular fallback overwrite"
@@ -533,15 +535,17 @@ if [ -n "$_cxx" ]; then
 
         # Verify --version matches module.prop and --oneshot does not leave a dead watchd.pid
         _wd_ver=$("$WATCHD_TEST_BIN" --version 2>/dev/null || true)
+        _prop_ver=$(awk -F= '$1=="version"{sub(/^v/,"",$2);print $2;exit}' "$REPO_ROOT/module.prop" 2>/dev/null || true)
         WD_ONE_RUN="$TMP_DIR/wd_oneshot_run"
-        if [ "$_wd_ver" = "coretype-watchd 1.2.1" ] \
+        if [ "$_wd_ver" = "coretype-watchd ${_prop_ver}" ] \
+            && [ "$_prop_ver" = "1.2.2" ] \
             && "$WATCHD_TEST_BIN" --moddir "$WD_MOD" --datadir "$WD_DATA" --rundir "$WD_ONE_RUN" \
                 --gms-files "$WD_GMS" --data-fonts "$WD_DF" --oneshot \
             && [ -s "$WD_ONE_RUN/telemetry.prop" ] \
             && [ ! -e "$WD_ONE_RUN/watchd.pid" ]; then
-            pass "coretype-watchd --version (1.2.1) & --oneshot clean exit (zero dead watchd.pid)"
+            pass "coretype-watchd --version (${_prop_ver}) matches module.prop & --oneshot clean exit"
         else
-            fail "coretype-watchd --version or --oneshot check failed (ver=$_wd_ver)"
+            fail "coretype-watchd --version or --oneshot check failed (ver=$_wd_ver prop=$_prop_ver)"
         fi
     fi
 else

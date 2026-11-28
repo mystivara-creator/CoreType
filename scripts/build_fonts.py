@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-CoreType Font Engineering Pipeline (v1.2.1 — Dual Optical Master + Dynamic opsz GPOS Engine)
+CoreType Font Engineering Pipeline (v1.2.2 — 2D opsz × wght Apple CoreText Parity Engine)
 
 Transforms official Apple SF-Pro.ttf & SF-Pro-Italic.ttf into FIVE ultra-lean,
 optical-calibrated Variable Fonts + TWO GMS static instances for Android 12–17 & HyperOS 1–4:
 
-  1. CoreType-SFPro-Text.ttf           (opsz=17 pinned, wght 100..950 + wdth 75..100, -46 UPM GPOS)
-  2. CoreType-SFPro-Text-Italic.ttf    (opsz=17 pinned, wght 100..950, -46 UPM GPOS)
-  3. CoreType-SFPro-Display.ttf        (opsz=28 pinned, wght 100..950 + wdth 75..100, -26 UPM GPOS)
-  4. CoreType-SFPro-Display-Italic.ttf (opsz=28 pinned, wght 100..950, -26 UPM GPOS)
-  5. CoreType-SFPro-Flex.ttf           (continuous opsz 17..28 + GPOS 1.1 FeatureVariations -46 -> -26 UPM)
+  1. CoreType-SFPro-Text.ttf           (opsz=17, wght 100..950 + wdth 75..100, wght-adaptive GPOS -46/-32/-20 UPM)
+  2. CoreType-SFPro-Text-Italic.ttf    (opsz=17, wght 100..950, wght-adaptive GPOS -46/-32/-20 UPM)
+  3. CoreType-SFPro-Display.ttf        (opsz=28, wght 100..950 + wdth 75..100, wght-adaptive GPOS -14/-26/-16 UPM)
+  4. CoreType-SFPro-Display-Italic.ttf (opsz=28, wght 100..950, wght-adaptive GPOS -14/-26/-16 UPM)
+  5. CoreType-SFPro-Flex.ttf           (continuous opsz 17..28 + 2D opsz×wght GPOS 1.1 FeatureVariations)
   6. CoreType-SFPro-GMS-Medium.ttf     (static Text Medium wght=500, opsz=17 for GMS FontsProvider)
   7. CoreType-SFPro-GMS-Bold.ttf       (static Semi-Display Semibold wght=600, opsz=24 for GMS FontsProvider)
 """
@@ -41,12 +41,34 @@ ANDROID_LINE_GAP = 0
 ANDROID_WIN_ASCENT = 1968
 ANDROID_WIN_DESCENT = 492
 
-# Optical master specifications derived directly from Apple SF-Pro.ttf `trak` table (UPM 2048):
-# - Text (16–17pt iOS UI): Apple `trak` track 0.0 is -40..-52 UPM -> bake -46 UPM (+ mild wdth=96.5 default)
-# - Display (24–36pt Headers / Clocks): Display glyphs are already ~100 UPM tighter than Text;
-#   bake -26 UPM Display tracking (+ mild wdth=97.0 default) for crisp, punchy iOS headlines.
-# - Flex (Continuous opsz 17..28 for RobotoFlex / Material 3 / Jetpack Compose): preserves live
-#   continuous `opsz` axis (17..28) with GPOS 1.1 FeatureVariations (-46 Text -> -26 Display at opsz>=22).
+# 2D (opsz × wght) Apple HIG CoreText tracking rules evaluated top-to-bottom (first match wins):
+# - Text (opsz=17): snug -46 UPM for body/labels (wght < 580), breathing open to -32 UPM at
+#   Semibold/Bold (wght >= 580) and -20 UPM at Heavy/Black (wght >= 750) — makes HyperOS MiSans
+#   Weight Slider and bold UI runs feel alive with zero stroke collision.
+# - Display (opsz=28): airy -14 UPM for Thin/UltraLight clocks (wght <= 280), iconic -26 UPM
+#   for Light..Bold headers, and sculptural -16 UPM for Heavy/Black (wght >= 750).
+# - Flex (continuous opsz 17..28): Apple's exact 20pt Text->Semi-Display (-34 UPM) and 24pt
+#   Large Display (-24 UPM) optical thresholds combined with weight-adaptive breathing (-14/-16/-20/-32 UPM).
+TEXT_WEIGHT_VARIATIONS = [
+    {"conditions": [("wght", 750.0, None)], "track_units": -20, "space_track": -10, "label": "Text-Heavy"},
+    {"conditions": [("wght", 580.0, None)], "track_units": -32, "space_track": -14, "label": "Text-Bold"},
+]
+
+DISPLAY_WEIGHT_VARIATIONS = [
+    {"conditions": [("wght", None, 280.0)], "track_units": -14, "space_track": -6, "label": "Display-Thin"},
+    {"conditions": [("wght", 750.0, None)], "track_units": -16, "space_track": -8, "label": "Display-Heavy"},
+]
+
+FLEX_2D_VARIATIONS = [
+    {"conditions": [("opsz", 24.0, None), ("wght", 750.0, None)], "track_units": -16, "space_track": -8, "label": "Display-Heavy"},
+    {"conditions": [("opsz", 24.0, None), ("wght", None, 280.0)], "track_units": -14, "space_track": -6, "label": "Display-Thin"},
+    {"conditions": [("opsz", 24.0, None)], "track_units": -24, "space_track": -10, "label": "Display"},
+    {"conditions": [("opsz", 20.0, None), ("wght", 750.0, None)], "track_units": -18, "space_track": -8, "label": "SemiDisplay-Heavy"},
+    {"conditions": [("opsz", 20.0, None)], "track_units": -34, "space_track": -14, "label": "SemiDisplay"},
+    {"conditions": [("wght", 750.0, None)], "track_units": -20, "space_track": -10, "label": "Text-Heavy"},
+    {"conditions": [("wght", 580.0, None)], "track_units": -32, "space_track": -14, "label": "Text-Bold"},
+]
+
 OPTICAL_SPECS = [
     {
         "src": "SF-Pro.ttf",
@@ -56,6 +78,7 @@ OPTICAL_SPECS = [
         "default_wdth": 96.5,
         "track_units": -46,
         "space_track": -18,
+        "feature_variations": TEXT_WEIGHT_VARIATIONS,
         "family": "CoreType SF Pro Text",
         "subfamily": "Regular",
         "ps_name": "CoreTypeSFProText-Regular",
@@ -68,6 +91,7 @@ OPTICAL_SPECS = [
         "default_wdth": None,
         "track_units": -46,
         "space_track": -18,
+        "feature_variations": TEXT_WEIGHT_VARIATIONS,
         "family": "CoreType SF Pro Text",
         "subfamily": "Italic",
         "ps_name": "CoreTypeSFProText-Italic",
@@ -80,6 +104,7 @@ OPTICAL_SPECS = [
         "default_wdth": 97.0,
         "track_units": -26,
         "space_track": -12,
+        "feature_variations": DISPLAY_WEIGHT_VARIATIONS,
         "family": "CoreType SF Pro Display",
         "subfamily": "Regular",
         "ps_name": "CoreTypeSFProDisplay-Regular",
@@ -92,6 +117,7 @@ OPTICAL_SPECS = [
         "default_wdth": None,
         "track_units": -26,
         "space_track": -12,
+        "feature_variations": DISPLAY_WEIGHT_VARIATIONS,
         "family": "CoreType SF Pro Display",
         "subfamily": "Italic",
         "ps_name": "CoreTypeSFProDisplay-Italic",
@@ -104,9 +130,7 @@ OPTICAL_SPECS = [
         "default_wdth": 96.5,
         "track_units": -46,
         "space_track": -18,
-        "display_track_units": -26,
-        "display_space_track": -12,
-        "opsz_switch_pt": 22.0,
+        "feature_variations": FLEX_2D_VARIATIONS,
         "family": "CoreType SF Pro Flex",
         "subfamily": "Regular",
         "ps_name": "CoreTypeSFProFlex-Regular",
@@ -262,7 +286,7 @@ def _build_tracking_lookup(font: "TTFont", track_units: int, space_track: int):
 
         is_digit = (cp is not None and 0x0030 <= cp <= 0x0039) or gname.split(".")[0] in digit_prefixes
         if is_digit:
-            # Keep Display (-26) digits at pure 0 UPM; gentle -8 UPM on Text (-46)
+            # Keep Semi-Display/Display/Bold/Heavy (>= -36) digits at pure 0 UPM; gentle -8 UPM on Text (-46)
             if track_units >= -36:
                 continue
             delta = -8
@@ -270,6 +294,14 @@ def _build_tracking_lookup(font: "TTFont", track_units: int, space_track: int):
         elif cp in (0x0020, 0x00A0):
             delta = space_track
             x_place = 0
+        elif cat == "Sc" or cp in (0x0025, 0x00B0, 0x2030):
+            # Currency & numeric unit symbols ($, €, Rp, %, °, ‰) -> airy 40% tracking next to digits
+            delta = int(round(track_units * 0.40))
+            x_place = int(round(delta / 2.0))
+        elif cat in ("Ps", "Pe", "Pi", "Pf") or cp in (0x0022, 0x0027, 0x002F):
+            # Parentheses, brackets, quotation marks & slash -> crisp 45% optical clearance
+            delta = int(round(track_units * 0.45))
+            x_place = int(round(delta / 2.0))
         elif aw <= 450:
             # Narrow punctuation / thin stems (i, l, ., :, ;) -> gentler proportional tracking
             delta = int(round(track_units * 0.45))
@@ -285,6 +317,9 @@ def _build_tracking_lookup(font: "TTFont", track_units: int, space_track: int):
         else:
             delta = track_units
             x_place = int(round(delta / 2.0))
+
+        if delta == 0:
+            continue
 
         # Safety clamp: never allow advance width to drop below 40% of original
         if aw + delta < max(120, int(aw * 0.4)):
@@ -354,96 +389,177 @@ def bake_gpos_tracking(font: "TTFont", track_units: int, space_track: int):
     return count, new_lookup_idx
 
 
-def bake_gpos_opsz_feature_variations(
+def _piecewise_linear_map(value: float, segments: dict) -> float:
+    """Apply an OpenType `avar` piecewise-linear mapping dictionary to a normalized coordinate."""
+    if not segments:
+        return value
+    pts = sorted(segments.items())
+    if value <= pts[0][0]:
+        return pts[0][1]
+    if value >= pts[-1][0]:
+        return pts[-1][1]
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        if x0 <= value <= x1:
+            if x1 == x0:
+                return y0
+            return y0 + (y1 - y0) * ((value - x0) / (x1 - x0))
+    return value
+
+
+def normalize_axis_value(font: "TTFont", axis_tag: str, user_value: float):
+    """
+    Convert a user-space axis value (e.g. wght=580, opsz=20) into its post-`avar`
+    normalized [-1.0, 1.0] coordinate as evaluated by HarfBuzz/Minikin FeatureVariations.
+    Returns (axis_index, normalized_value) or (None, None) if the axis is absent.
+    """
+    if "fvar" not in font:
+        return None, None
+    axis_idx = None
+    axis = None
+    for idx, a in enumerate(font["fvar"].axes):
+        if a.axisTag == axis_tag:
+            axis_idx = idx
+            axis = a
+            break
+    if axis is None:
+        return None, None
+
+    if user_value <= axis.defaultValue:
+        span = axis.defaultValue - axis.minValue
+        norm = 0.0 if span <= 0 else (user_value - axis.defaultValue) / span
+    else:
+        span = axis.maxValue - axis.defaultValue
+        norm = 0.0 if span <= 0 else (user_value - axis.defaultValue) / span
+    norm = max(-1.0, min(1.0, norm))
+
+    if "avar" in font and axis_tag in font["avar"].segments:
+        norm = _piecewise_linear_map(norm, font["avar"].segments[axis_tag])
+        norm = max(-1.0, min(1.0, norm))
+
+    return axis_idx, norm
+
+
+def bake_gpos_feature_variations(
     font: "TTFont",
     default_lookup_idx: int,
-    display_track_units: int,
-    display_space_track: int,
-    opsz_switch_pt: float,
+    rules: list,
 ) -> int:
     """
-    Attach an OpenType GPOS 1.1 FeatureVariations record on `opsz` so CoreType-SFPro-Flex.ttf
-    automatically switches from Apple Text tracking (-46 UPM, opsz < 22) to Apple Display
-    tracking (-26 UPM, opsz >= 22) inside Android HarfBuzz / Minikin.
+    Attach ordered OpenType GPOS 1.1 FeatureVariations records across any combination of
+    `opsz` and `wght` axes so Android HarfBuzz/Minikin dynamically adapts Apple tracking
+    both by optical size (17->20->24->28) AND by weight (Thin/Regular/Bold/Heavy).
+    Returns number of FeatureVariationRecords added.
     """
-    if default_lookup_idx is None or "GPOS" not in font or "fvar" not in font:
-        return 0
-
-    axes = font["fvar"].axes
-    opsz_idx = None
-    opsz_axis = None
-    for idx, axis in enumerate(axes):
-        if axis.axisTag == "opsz":
-            opsz_idx = idx
-            opsz_axis = axis
-            break
-    if opsz_axis is None or opsz_axis.maxValue <= opsz_axis.defaultValue:
-        return 0
-
-    norm_min = (opsz_switch_pt - opsz_axis.defaultValue) / (opsz_axis.maxValue - opsz_axis.defaultValue)
-    norm_min = max(0.0, min(1.0, norm_min))
-
-    disp_lookup, disp_count = _build_tracking_lookup(font, display_track_units, display_space_track)
-    if disp_lookup is None:
+    if default_lookup_idx is None or not rules or "GPOS" not in font or "fvar" not in font:
         return 0
 
     gpos = font["GPOS"].table
-    disp_lookup_idx = len(gpos.LookupList.Lookup)
-    gpos.LookupList.Lookup.append(disp_lookup)
-    gpos.LookupList.LookupCount = len(gpos.LookupList.Lookup)
+    lookup_cache = {}
+    new_records = []
 
-    # Build FeatureTableSubstitution records replacing default_lookup_idx -> disp_lookup_idx on all `kern` features
-    subst_records = []
-    for feat_idx, feat_rec in enumerate(gpos.FeatureList.FeatureRecord):
-        if feat_rec.FeatureTag != "kern":
+    # Small F2DOT14 quantization epsilon so exact boundary coordinates (e.g. opsz=20, wght=580)
+    # always match inclusively after 2.14 fixed-point serialization.
+    eps = 1e-4
+
+    for rule in rules:
+        cond_tables = []
+        valid_rule = True
+        for axis_tag, min_user, max_user in rule["conditions"]:
+            if min_user is not None:
+                axis_idx, norm_min = normalize_axis_value(font, axis_tag, min_user)
+                if axis_idx is None:
+                    valid_rule = False
+                    break
+                norm_min = max(-1.0, norm_min - eps)
+            else:
+                axis_idx = None
+                norm_min = -1.0
+
+            if max_user is not None:
+                axis_idx2, norm_max = normalize_axis_value(font, axis_tag, max_user)
+                if axis_idx2 is None:
+                    valid_rule = False
+                    break
+                axis_idx = axis_idx if axis_idx is not None else axis_idx2
+                norm_max = min(1.0, norm_max + eps)
+            else:
+                norm_max = 1.0
+
+            if axis_idx is None or norm_min > norm_max:
+                valid_rule = False
+                break
+
+            cond = otTables.ConditionTable()
+            cond.Format = 1
+            cond.AxisIndex = axis_idx
+            cond.FilterRangeMinValue = norm_min
+            cond.FilterRangeMaxValue = norm_max
+            cond_tables.append(cond)
+
+        if not valid_rule or not cond_tables:
             continue
-        alt_feat = otTables.Feature()
-        alt_feat.FeatureParams = feat_rec.Feature.FeatureParams
-        alt_feat.LookupListIndex = [
-            disp_lookup_idx if li == default_lookup_idx else li
-            for li in feat_rec.Feature.LookupListIndex
-        ]
-        alt_feat.LookupCount = len(alt_feat.LookupListIndex)
 
-        sub_rec = otTables.FeatureTableSubstitutionRecord()
-        sub_rec.FeatureIndex = feat_idx
-        sub_rec.Feature = alt_feat
-        subst_records.append(sub_rec)
+        cache_key = (rule["track_units"], rule["space_track"])
+        if cache_key in lookup_cache:
+            alt_lookup_idx = lookup_cache[cache_key]
+        else:
+            alt_lookup, _cnt = _build_tracking_lookup(font, rule["track_units"], rule["space_track"])
+            if alt_lookup is None:
+                continue
+            alt_lookup_idx = len(gpos.LookupList.Lookup)
+            gpos.LookupList.Lookup.append(alt_lookup)
+            gpos.LookupList.LookupCount = len(gpos.LookupList.Lookup)
+            lookup_cache[cache_key] = alt_lookup_idx
 
-    if not subst_records:
+        subst_records = []
+        for feat_idx, feat_rec in enumerate(gpos.FeatureList.FeatureRecord):
+            if feat_rec.FeatureTag != "kern":
+                continue
+            alt_feat = otTables.Feature()
+            alt_feat.FeatureParams = feat_rec.Feature.FeatureParams
+            alt_feat.LookupListIndex = [
+                alt_lookup_idx if li == default_lookup_idx else li
+                for li in feat_rec.Feature.LookupListIndex
+            ]
+            alt_feat.LookupCount = len(alt_feat.LookupListIndex)
+
+            sub_rec = otTables.FeatureTableSubstitutionRecord()
+            sub_rec.FeatureIndex = feat_idx
+            sub_rec.Feature = alt_feat
+            subst_records.append(sub_rec)
+
+        if not subst_records:
+            continue
+
+        cond_set = otTables.ConditionSet()
+        cond_set.ConditionTable = cond_tables
+        cond_set.ConditionCount = len(cond_tables)
+
+        feat_subst = otTables.FeatureTableSubstitution()
+        feat_subst.Version = 0x00010000
+        feat_subst.SubstitutionRecord = subst_records
+        feat_subst.SubstitutionCount = len(subst_records)
+
+        fvr = otTables.FeatureVariationRecord()
+        fvr.ConditionSet = cond_set
+        fvr.FeatureTableSubstitution = feat_subst
+        new_records.append(fvr)
+
+    if not new_records:
         return 0
-
-    cond = otTables.ConditionTable()
-    cond.Format = 1
-    cond.AxisIndex = opsz_idx
-    cond.FilterRangeMinValue = norm_min
-    cond.FilterRangeMaxValue = 1.0
-
-    cond_set = otTables.ConditionSet()
-    cond_set.ConditionTable = [cond]
-    cond_set.ConditionCount = 1
-
-    feat_subst = otTables.FeatureTableSubstitution()
-    feat_subst.Version = 0x00010000
-    feat_subst.SubstitutionRecord = subst_records
-    feat_subst.SubstitutionCount = len(subst_records)
-
-    fvr = otTables.FeatureVariationRecord()
-    fvr.ConditionSet = cond_set
-    fvr.FeatureTableSubstitution = feat_subst
 
     gpos.Version = 0x00010001  # GPOS 1.1 required for FeatureVariations
     if getattr(gpos, "FeatureVariations", None) is None:
         fv = otTables.FeatureVariations()
         fv.Version = 0x00010000
-        fv.FeatureVariationRecord = [fvr]
-        fv.FeatureVariationCount = 1
+        fv.FeatureVariationRecord = new_records
+        fv.FeatureVariationCount = len(new_records)
         gpos.FeatureVariations = fv
     else:
-        gpos.FeatureVariations.FeatureVariationRecord.append(fvr)
+        gpos.FeatureVariations.FeatureVariationRecord.extend(new_records)
         gpos.FeatureVariations.FeatureVariationCount = len(gpos.FeatureVariations.FeatureVariationRecord)
 
-    return disp_count
+    return len(new_records)
 
 
 def calibrate_vertical_metrics(font: "TTFont") -> None:
@@ -519,15 +635,10 @@ def build_optical_master(src_path: Path, out_path: Path, spec: dict) -> None:
         font = instantiateVariableFont(font, axis_limits, inplace=True)
 
         tracked, default_lookup_idx = bake_gpos_tracking(font, spec["track_units"], spec["space_track"])
-        fv_tracked = 0
-        if "display_track_units" in spec and default_lookup_idx is not None:
-            fv_tracked = bake_gpos_opsz_feature_variations(
-                font,
-                default_lookup_idx,
-                spec["display_track_units"],
-                spec["display_space_track"],
-                spec.get("opsz_switch_pt", 22.0),
-            )
+        fv_count = 0
+        fv_rules = spec.get("feature_variations") or []
+        if fv_rules and default_lookup_idx is not None:
+            fv_count = bake_gpos_feature_variations(font, default_lookup_idx, fv_rules)
         calibrate_vertical_metrics(font)
         set_name_records(font, spec["family"], spec["subfamily"], spec["ps_name"])
 
@@ -541,14 +652,10 @@ def build_optical_master(src_path: Path, out_path: Path, spec: dict) -> None:
             for a in verify["fvar"].axes
         ]
     size_kb = out_path.stat().st_size / 1024.0
-    fv_note = (
-        f" + FeatureVariations(opsz>={spec.get('opsz_switch_pt', 22.0):.0f}: {spec['display_track_units']} UPM, {fv_tracked} glyphs)"
-        if fv_tracked > 0
-        else ""
-    )
+    fv_note = f" + GPOS-1.1 FeatureVariations({fv_count} rules)" if fv_count > 0 else ""
     print(
         f"           wrote {out_path.name} ({size_kb:.1f} KB) | "
-        f"tracked={tracked} glyphs ({spec['track_units']} UPM){fv_note} | axes: {', '.join(axes_summary)}"
+        f"tracked={tracked} glyphs (default {spec['track_units']} UPM){fv_note} | axes: {', '.join(axes_summary)}"
     )
 
 
@@ -601,8 +708,9 @@ def build_gms_static_instances(out_dir: Path) -> None:
 
 
 def audit_built_fonts(out_dir: Path) -> None:
-    """Verify OS/2 & hhea vertical metrics parity, USE_TYPO_METRICS, static GMS weightClass, and Flex opsz + FeatureVariations."""
+    """Verify OS/2 & hhea vertical metrics parity, USE_TYPO_METRICS, static GMS weightClass, and 2D FeatureVariations."""
     gms_weight_map = {s["out"]: s["weight_class"] for s in GMS_STATIC_SPECS}
+    expected_fv_map = {s["out"]: len(s.get("feature_variations") or []) for s in OPTICAL_SPECS}
     expected_files = [s["out"] for s in OPTICAL_SPECS] + [s["out"] for s in GMS_STATIC_SPECS]
     for fname in expected_files:
         fpath = out_dir / fname
@@ -642,6 +750,14 @@ def audit_built_fonts(out_dir: Path) -> None:
                     f"Unexpected usWeightClass in {fname}: {os2.usWeightClass} != {gms_weight_map[fname]}"
                 )
 
+            min_fv = expected_fv_map.get(fname, 0)
+            if min_fv > 0:
+                gpos = font["GPOS"].table
+                fv = getattr(gpos, "FeatureVariations", None)
+                assert gpos.Version == 0x00010001 and fv is not None and fv.FeatureVariationCount >= min_fv, (
+                    f"{fname} missing expected GPOS 1.1 FeatureVariations (need >= {min_fv})!"
+                )
+
             if fname == "CoreType-SFPro-Flex.ttf":
                 axes = {a.axisTag: (a.minValue, a.defaultValue, a.maxValue) for a in font["fvar"].axes}
                 assert "opsz" in axes, "CoreType-SFPro-Flex.ttf missing continuous opsz axis!"
@@ -650,21 +766,16 @@ def audit_built_fonts(out_dir: Path) -> None:
                     f"Flex opsz range invalid: {axes['opsz']} (expected continuous 17..28)"
                 )
                 assert "wght" in axes and "wdth" in axes, f"Flex missing wght/wdth axes: {axes}"
-                gpos = font["GPOS"].table
-                fv = getattr(gpos, "FeatureVariations", None)
-                assert gpos.Version == 0x00010001 and fv is not None and fv.FeatureVariationCount >= 1, (
-                    "CoreType-SFPro-Flex.ttf missing GPOS 1.1 FeatureVariations for dynamic opsz tracking!"
-                )
 
     print(
-        f"[CoreType] Vertical metrics, continuous opsz & GPOS FeatureVariations audit PASSED "
+        f"[CoreType] Vertical metrics, continuous opsz & 2D GPOS FeatureVariations audit PASSED "
         f"(ascent={ANDROID_ASCENT}, descent={ANDROID_DESCENT}, ratio={(ANDROID_ASCENT - ANDROID_DESCENT)/2048.0:.4f}, "
-        f"Flex opsz=17..28 [-46->-26 UPM], GMS-Bold opsz=24)"
+        f"Text wght[-46/-32/-20], Display wght[-14/-26/-16], Flex 2D[7 rules], GMS-Bold opsz=24)"
     )
 
 
 def self_test_specs() -> int:
-    """Fast dependency-free audit of CoreType font metrics, optical specs, RIBBI naming, and Unicode filtering."""
+    """Fast dependency-free audit of CoreType font metrics, 2D optical specs, avar math, RIBBI naming, and Unicode filtering."""
     total_h = ANDROID_ASCENT - ANDROID_DESCENT
     ratio = total_h / 2048.0
     ascent_share = ANDROID_ASCENT / float(total_h)
@@ -673,16 +784,25 @@ def self_test_specs() -> int:
     assert 1.17 <= ratio <= 1.22, f"Unexpected line-height ratio: {ratio:.4f}"
     assert abs(ascent_share - 0.80) < 0.01, f"Ascent share {ascent_share:.4f} deviates from 4:1 CJK parity"
 
+    # Verify all 5 variable masters define weight/optical FeatureVariations
+    for spec in OPTICAL_SPECS:
+        assert len(spec.get("feature_variations") or []) >= 2, f"{spec['out']} missing FeatureVariations rules"
+
     flex_specs = [s for s in OPTICAL_SPECS if s["out"] == "CoreType-SFPro-Flex.ttf"]
     assert len(flex_specs) == 1 and flex_specs[0]["opsz"] == (17.0, 17.0, 28.0), "Flex opsz must preserve Apple 17..28 domain"
-    assert flex_specs[0]["track_units"] == -46 and flex_specs[0]["display_track_units"] == -26, (
-        "Flex dynamic FeatureVariations must transition -46 Text -> -26 Display"
+    assert flex_specs[0]["track_units"] == -46 and len(flex_specs[0]["feature_variations"]) == 7, (
+        "Flex 2D FeatureVariations must define 7 ordered opsz x wght rules"
     )
     gms_bold = [s for s in GMS_STATIC_SPECS if s["out"] == "CoreType-SFPro-GMS-Bold.ttf"]
     assert len(gms_bold) == 1 and gms_bold[0]["coords"].get("opsz") == 24.0, (
         "GMS Bold static instance must use Semi-Display opsz=24.0"
     )
     assert "tnum" in UI_LAYOUT_FEATURES and "calt" in UI_LAYOUT_FEATURES and "kern" in UI_LAYOUT_FEATURES
+
+    # Verify avar piecewise linear mapping math
+    seg = {-1.0: -1.0, 0.0: 0.0, 0.5: 0.65, 1.0: 1.0}
+    assert abs(_piecewise_linear_map(0.25, seg) - 0.325) < 1e-6
+    assert abs(_piecewise_linear_map(0.75, seg) - 0.825) < 1e-6
 
     # Verify RIBBI compliance on non-RIBBI static subfamilies
     med_names = build_name_records("CoreType SF Pro Text", "Medium", "CoreTypeSFProText-Medium")
@@ -699,8 +819,8 @@ def self_test_specs() -> int:
 
     print(
         f"[PASS] build_fonts.py audit OK: metrics={ANDROID_ASCENT}/{ANDROID_DESCENT} "
-        f"(ratio={ratio:.4f}, ascent={ascent_share*100:.1f}%), Flex opsz=17..28 FeatureVariations(-46->-26), "
-        f"GMS-Bold opsz=24, RIBBI+tnum+calt+Unicode verified"
+        f"(ratio={ratio:.4f}, ascent={ascent_share*100:.1f}%), 2D opsz x wght FeatureVariations across all 5 masters, "
+        f"GMS-Bold opsz=24, avar+RIBBI+tnum+calt+Unicode verified"
     )
     return 0
 
