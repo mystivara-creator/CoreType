@@ -142,6 +142,7 @@ fi
 assert_not_grep 'CoreType-SFPro' "$TMP_DIR/font_fallback.xml" "Zero non-stock CoreType-SFPro filenames in XML"
 assert_grep 'CoreType Dual-Optical' "$TMP_DIR/font_fallback.xml" "Contains CoreType Dual-Optical XML marker"
 assert_grep 'weight="400" style="normal">Roboto-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Body 400 routed to Text slot"
+assert_not_grep 'style="italic">Roboto-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Omitted fake upright italic on HyperOS 3/4 so Minikin synthesizes true oblique italics"
 assert_grep 'weight="400" style="normal">RobotoFlex-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "roboto-flex routed to dedicated continuous-opsz Flex slot"
 assert_grep 'tag="opsz" stylevalue="17"' "$TMP_DIR/font_fallback.xml" "roboto-flex declares continuous opsz=17 for Text weights"
 assert_grep 'tag="opsz" stylevalue="28"' "$TMP_DIR/font_fallback.xml" "roboto-flex declares continuous opsz=28 for Display weights"

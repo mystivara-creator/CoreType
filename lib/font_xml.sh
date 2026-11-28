@@ -46,11 +46,17 @@ ct_resolve_stock_slots() {
         CT_SLOT_ITAL="RobotoStatic-Italic.ttf"
     elif [ -e "$_sdir/RobotoCondensed-Italic.ttf" ]; then
         CT_SLOT_ITAL="RobotoCondensed-Italic.ttf"
+    elif [ -e "$_sdir/Roboto-MediumItalic.ttf" ]; then
+        CT_SLOT_ITAL="Roboto-MediumItalic.ttf"
+    elif [ -e "$_sdir/Roboto-BoldItalic.ttf" ]; then
+        CT_SLOT_ITAL="Roboto-BoldItalic.ttf"
+    elif [ -e "$_sdir/Roboto-LightItalic.ttf" ]; then
+        CT_SLOT_ITAL="Roboto-LightItalic.ttf"
     else
         CT_SLOT_ITAL="$CT_SLOT_TEXT"
     fi
 
-    if [ -e "$_sdir/Roboto-BoldItalic.ttf" ]; then
+    if [ -e "$_sdir/Roboto-BoldItalic.ttf" ] && [ "$CT_SLOT_ITAL" != "Roboto-BoldItalic.ttf" ]; then
         CT_SLOT_DITAL="Roboto-BoldItalic.ttf"
     else
         CT_SLOT_DITAL="$CT_SLOT_ITAL"
@@ -95,6 +101,13 @@ ct_emit_font_entry() {
     _wdth="$4"
     _wght="${5:-$_w}"
 
+    # When a ROM (e.g. HyperOS 3/4) ships no separate stock Roboto*Italic.ttf slot,
+    # omit style="italic" pointing to upright Roboto-Regular.ttf so Android Minikin
+    # synthesizes clean oblique italics instead of rendering <em>/_italic_ upright.
+    if [ "$_style" = "italic" ] && [ "$CT_SLOT_ITAL" = "$CT_SLOT_TEXT" ]; then
+        return 0
+    fi
+
     if [ "$_optical" = "display" ]; then
         if [ "$_style" = "italic" ]; then
             _file="$CT_SLOT_DITAL"
@@ -126,6 +139,9 @@ ct_emit_flex_font_entry() {
     _wght="$5"
 
     if [ "$_style" = "italic" ]; then
+        if [ "$CT_SLOT_ITAL" = "$CT_SLOT_TEXT" ]; then
+            return 0
+        fi
         if [ "$_opsz" -ge 24 ]; then
             _file="$CT_SLOT_DITAL"
         else

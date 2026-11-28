@@ -262,6 +262,7 @@ def _build_tracking_lookup(font: "TTFont", track_units: int, space_track: int):
             continue
 
         cp = glyph_to_cp.get(gname)
+        cat = None
         if cp is not None:
             cat = unicodedata.category(chr(cp))
             if cat in ("Mn", "Me", "Cf", "Cc"):
@@ -280,6 +281,14 @@ def _build_tracking_lookup(font: "TTFont", track_units: int, space_track: int):
         elif aw <= 450:
             # Narrow punctuation / thin stems (i, l, ., :, ;) -> gentler proportional tracking
             delta = int(round(track_units * 0.45))
+            x_place = int(round(delta / 2.0))
+        elif cat in ("Sm", "Pd"):
+            # Math operators, arrows & dashes (+, =, ->, —, –) -> airy 50% tracking
+            delta = int(round(track_units * 0.50))
+            x_place = int(round(delta / 2.0))
+        elif cat == "Lu":
+            # Uppercase letters & ALL-CAPS iOS section headers -> 75% tracking (-34 Text / -20 Display)
+            delta = int(round(track_units * 0.75))
             x_place = int(round(delta / 2.0))
         else:
             delta = track_units
@@ -602,6 +611,17 @@ def audit_built_fonts(out_dir: Path) -> None:
 
         line_ratio = (os2.sTypoAscender - os2.sTypoDescender) / float(upm)
         assert 1.17 <= line_ratio <= 1.22, f"Out-of-range line-height ratio {line_ratio:.4f} in {fname}"
+
+        is_italic_file = "Italic" in fname
+        italic_angle = font["post"].italicAngle if "post" in font else 0.0
+        if is_italic_file:
+            assert (os2.fsSelection & 0x01) != 0 and italic_angle < 0, (
+                f"Italic metadata missing in {fname}: fsSelection=0x{os2.fsSelection:x} italicAngle={italic_angle}"
+            )
+        else:
+            assert (os2.fsSelection & 0x01) == 0 and italic_angle == 0, (
+                f"Unexpected italic flag in upright {fname}: fsSelection=0x{os2.fsSelection:x} italicAngle={italic_angle}"
+            )
 
         if fname == "CoreType-SFPro-Flex.ttf":
             axes = {a.axisTag: (a.minValue, a.defaultValue, a.maxValue) for a in font["fvar"].axes}
