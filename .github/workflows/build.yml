@@ -76,19 +76,19 @@ jobs:
           assert all(g["dx"] == 0 for g in d_disp), f"Unexpected negative tracking on Display digits: {d_disp}"
           d_flex_disp = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=28,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "100"], text=True))
           assert all(g["dx"] == 0 for g in d_flex_disp), f"Unexpected negative tracking on Flex Display (opsz=28) digits: {d_flex_disp}"
-          flex_12 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=12,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
+          flex_17 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=17,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
           flex_22 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=22,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
-          flex_36 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=36,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
-          w12 = sum(g["ax"] for g in flex_12)
+          flex_28 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=28,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
+          w17 = sum(g["ax"] for g in flex_17)
           w22 = sum(g["ax"] for g in flex_22)
-          w36 = sum(g["ax"] for g in flex_36)
-          assert w12 != w22 and w22 != w36 and w12 != w36, f"Flex continuous opsz axis had no visual advance delta ({w12} / {w22} / {w36})!"
-          dx_text = min(g["dx"] for g in flex_12)
-          dx_disp = min(g["dx"] for g in flex_36)
+          w28 = sum(g["ax"] for g in flex_28)
+          assert w17 != w22 and w22 != w28 and w17 != w28, f"Flex continuous opsz axis had no visual advance delta ({w17} / {w22} / {w28})!"
+          dx_text = min(g["dx"] for g in flex_17)
+          dx_disp = min(g["dx"] for g in flex_28)
           assert dx_text < dx_disp < 0, f"Flex GPOS FeatureVariations did not relax tracking from Text to Display (dx_text={dx_text}, dx_disp={dx_disp})!"
           s_jdm = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Text.ttf", "Yanz 25 \u02b2\u1d48\u1d50"], text=True))
           assert all(g["g"] != ".notdef" for g in s_jdm), f"Missing superscript glyph in Phonetic Extensions: {s_jdm}"
-          print(f"[PASS] HarfBuzz GPOS tracking, Flex continuous opsz (12:{w12} -> 22:{w22} -> 36:{w36}) + FeatureVariations (dx {dx_text}->{dx_disp}), pure digit spacing (100), Phonetic Extensions & Apple calt colon verified ({c_text} -> {c_clock})")
+          print(f"[PASS] HarfBuzz GPOS tracking, Flex continuous opsz (17:{w17} -> 22:{w22} -> 28:{w28}) + FeatureVariations (dx {dx_text}->{dx_disp}), pure digit spacing (100), Phonetic Extensions & Apple calt colon verified ({c_text} -> {c_clock})")
           PY
 
       - name: Package CoreType Lite (SF Pro Only)
@@ -149,6 +149,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF_NAME}"
+          MOD_VER=$(grep '^version=' module.prop | cut -d= -f2)
+          if [ "$TAG" != "$MOD_VER" ]; then
+            echo "ERROR: Git tag ($TAG) does not match module.prop version ($MOD_VER)!"
+            exit 1
+          fi
           FULL_ZIP="dist/CoreType-${TAG}-Full.zip"
           LITE_ZIP="dist/CoreType-${TAG}-Lite.zip"
           FULL_SHA=$(sha256sum "$FULL_ZIP" | awk '{print $1}')

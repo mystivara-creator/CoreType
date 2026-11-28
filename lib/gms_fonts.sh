@@ -105,7 +105,7 @@ ct_bind_one_gms_font() {
     _src="$1"
     _dst="$2"
     [ -f "$_dst" ] || return 0
-    if grep -Fq " $_dst " /proc/mounts 2>/dev/null; then
+    if ct_is_mounted "$_dst"; then
         CT_GMS_FONTS_BOUND=$((CT_GMS_FONTS_BOUND + 1))
         return 0
     fi

@@ -1,13 +1,13 @@
 #!/system/bin/sh
 # shellcheck disable=SC2034
 # CoreType — Apple iOS Emoji Engine (KernelSU-Umount-Safe + Non-Destructive GMS Cache Bind)
-# Works universally across Android 12–16 and HyperOS 1 / 2 / 3 / 4.
+# Works universally across Android 12–17 and HyperOS 1 / 2 / 3 / 4.
 
 ct_emoji_master_valid() {
     _ef="$1"
     [ -f "$_ef" ] || return 1
     # Apple Color Emoji CBDT/CBLC binary is > 5 MB and starts with valid TrueType sfnt (00 01 00 00)
-    _sz=$(wc -c < "$_ef" 2>/dev/null || echo 0)
+    _sz=$(ct_file_size "$_ef")
     [ "$_sz" -gt 5242880 ] || return 1
     if command -v od >/dev/null 2>&1; then
         _magic=$(od -An -tx1 -N4 "$_ef" 2>/dev/null | tr -d ' \n\r')
@@ -58,7 +58,7 @@ ct_bind_one_emoji_target() {
     _src="$1"
     _dst="$2"
     [ -f "$_dst" ] || return 0
-    if grep -Fq " $_dst " /proc/mounts 2>/dev/null; then
+    if ct_is_mounted "$_dst"; then
         CT_GMS_EMOJI_BOUND=$((CT_GMS_EMOJI_BOUND + 1))
         return 0
     fi
@@ -97,9 +97,9 @@ ct_bind_gms_emoji_cache() {
     # Prefer live mounted /system/fonts/NotoColorEmoji.ttf when already mounted & byte-identical
     _bind_src="$_emoji_src"
     if [ -r /system/fonts/NotoColorEmoji.ttf ]; then
-        _msz=$(wc -c < "$_emoji_src" 2>/dev/null || echo 0)
-        _lsz=$(wc -c < /system/fonts/NotoColorEmoji.ttf 2>/dev/null || echo 1)
-        if [ "$_msz" = "$_lsz" ]; then
+        _msz=$(ct_file_size "$_emoji_src")
+        _lsz=$(ct_file_size /system/fonts/NotoColorEmoji.ttf)
+        if [ "$_msz" -gt 0 ] && [ "$_msz" = "$_lsz" ]; then
             _bind_src="/system/fonts/NotoColorEmoji.ttf"
         fi
     fi

@@ -16,14 +16,40 @@ ct_log() {
     printf '[%s] %s\n' "$_ct_ts" "$1" >> "$CT_LOG_FILE" 2>/dev/null || true
 }
 
+ct_file_size() {
+    _fsz=$(wc -c < "$1" 2>/dev/null | tr -cd '0-9')
+    printf '%s\n' "${_fsz:-0}"
+}
+
+ct_is_mounted() {
+    _mnt_target="$1"
+    [ -r /proc/mounts ] || return 1
+    awk -v t="$_mnt_target" '$2 == t { found=1; exit } END { exit !found }' /proc/mounts 2>/dev/null
+}
+
+# Verify a PID still belongs to an expected process pattern before signaling (prevents PID reuse kills)
+ct_pid_matches() {
+    _pid="$1"
+    _pat="$2"
+    [ -n "$_pid" ] || return 1
+    kill -0 "$_pid" 2>/dev/null || return 1
+    if [ -r "/proc/$_pid/cmdline" ]; then
+        tr '\0' ' ' < "/proc/$_pid/cmdline" 2>/dev/null | grep -qE "$_pat"
+        return $?
+    fi
+    return 1
+}
+
 # Keep coretype.log perpetually lightweight (< 16 KB, max 100 recent lines)
 ct_trim_log() {
     if [ -r "$CT_LOG_FILE" ]; then
-        _lsz=$(wc -c < "$CT_LOG_FILE" 2>/dev/null || echo 0)
+        _lsz=$(ct_file_size "$CT_LOG_FILE")
         if [ "$_lsz" -gt 16384 ]; then
-            if tail -n 100 "$CT_LOG_FILE" > "$CT_LOG_FILE.tmp.$$" 2>/dev/null; then
-                mv "$CT_LOG_FILE.tmp.$$" "$CT_LOG_FILE" 2>/dev/null || true
+            _ltmp="$CT_LOG_FILE.tmp.$$"
+            if tail -n 100 "$CT_LOG_FILE" > "$_ltmp" 2>/dev/null && mv "$_ltmp" "$CT_LOG_FILE" 2>/dev/null; then
+                return 0
             fi
+            rm -f "$_ltmp" 2>/dev/null || true
         fi
     fi
 }
@@ -47,15 +73,21 @@ ct_conf_set() {
     ct_init_dirs
     _tmp="$CT_CONF_FILE.tmp.$$"
     if [ -r "$CT_CONF_FILE" ]; then
-        awk -F= -v k="$_key" -v v="$_val" '
+        if awk -F= -v k="$_key" -v v="$_val" '
             BEGIN { done=0 }
             $1 == k { print k "=" v; done=1; next }
             { print }
             END { if (!done) print k "=" v }
-        ' "$CT_CONF_FILE" > "$_tmp" 2>/dev/null && mv "$_tmp" "$CT_CONF_FILE"
+        ' "$CT_CONF_FILE" > "$_tmp" 2>/dev/null && mv "$_tmp" "$CT_CONF_FILE" 2>/dev/null; then
+            return 0
+        fi
     else
-        printf '%s=%s\n' "$_key" "$_val" > "$_tmp" && mv "$_tmp" "$CT_CONF_FILE"
+        if printf '%s=%s\n' "$_key" "$_val" > "$_tmp" 2>/dev/null && mv "$_tmp" "$CT_CONF_FILE" 2>/dev/null; then
+            return 0
+        fi
     fi
+    rm -f "$_tmp" 2>/dev/null || true
+    return 1
 }
 
 ct_state_set() {
@@ -64,15 +96,21 @@ ct_state_set() {
     ct_init_dirs
     _tmp="$CT_STATE_FILE.tmp.$$"
     if [ -r "$CT_STATE_FILE" ]; then
-        awk -F= -v k="$_key" -v v="$_val" '
+        if awk -F= -v k="$_key" -v v="$_val" '
             BEGIN { done=0 }
             $1 == k { print k "=" v; done=1; next }
             { print }
             END { if (!done) print k "=" v }
-        ' "$CT_STATE_FILE" > "$_tmp" 2>/dev/null && mv "$_tmp" "$CT_STATE_FILE"
+        ' "$CT_STATE_FILE" > "$_tmp" 2>/dev/null && mv "$_tmp" "$CT_STATE_FILE" 2>/dev/null; then
+            return 0
+        fi
     else
-        printf '%s=%s\n' "$_key" "$_val" > "$_tmp" && mv "$_tmp" "$CT_STATE_FILE"
+        if printf '%s=%s\n' "$_key" "$_val" > "$_tmp" 2>/dev/null && mv "$_tmp" "$CT_STATE_FILE" 2>/dev/null; then
+            return 0
+        fi
     fi
+    rm -f "$_tmp" 2>/dev/null || true
+    return 1
 }
 
 # Atomic single-pass write of state.prop (avoids repeated awk/mv forks during boot)
@@ -80,11 +118,16 @@ ct_state_set() {
 ct_state_write_all() {
     ct_init_dirs
     _tmp="$CT_STATE_FILE.tmp.$$"
-    : > "$_tmp"
-    for _kv in "$@"; do
-        printf '%s\n' "$_kv" >> "$_tmp"
-    done
-    mv "$_tmp" "$CT_STATE_FILE"
+    if : > "$_tmp" 2>/dev/null; then
+        for _kv in "$@"; do
+            printf '%s\n' "$_kv" >> "$_tmp" || { rm -f "$_tmp" 2>/dev/null || true; return 1; }
+        done
+        if mv "$_tmp" "$CT_STATE_FILE" 2>/dev/null; then
+            return 0
+        fi
+    fi
+    rm -f "$_tmp" 2>/dev/null || true
+    return 1
 }
 
 ct_get_fingerprint() {

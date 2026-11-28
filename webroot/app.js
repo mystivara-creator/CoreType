@@ -6,6 +6,9 @@
   const TELEM_FILE = "/dev/.coretype/telemetry.prop";
   const ACTION_SCRIPT = "/data/adb/modules/coretype/action.sh";
   const VALID_CONTRASTS = ["soft", "balanced", "apple_native"];
+  const VALID_PROFILES = ["dynamic_optical", "native_pro", "compact_crisp"];
+  const CONF_KEY_RE = /^[a-z0-9_]+$/;
+  const CONF_VAL_RE = /^-?[A-Za-z0-9_.-]+$/;
   const TAB_TITLES = {
     typography: "CoreType",
     ecosystem: "Ecosystem",
@@ -23,6 +26,8 @@
   let wantedEmoji = true;
   let emojiAvailable = false;
   let toastTimer = null;
+  let confWriteChain = Promise.resolve();
+  let suppressTabClickUntil = 0;
 
   function execShell(cmd) {
     return new Promise((resolve) => {
@@ -61,29 +66,57 @@
     return Math.max(-60, Math.min(80, Math.round(n / 5) * 5));
   }
 
-  function computeCurveWeights(curve, bias, contrast) {
-    const b = clampBias(bias);
-    const isHos = curve !== "aosp_linear";
-    const clampW = (x) => Math.max(100, Math.min(950, Math.round(x)));
+  // Exact 1:1 mathematical parity with ct_calc_wght() in lib/font_xml.sh (POSIX integer truncation)
+  function calcWght(slot, curve, bias, contrast) {
+    const isAosp = curve === "aosp_linear";
+    const b = Math.max(-60, Math.min(80, parseInt(bias, 10) || 0));
 
-    let w400 = clampW(400 + b);
-    let w500 = clampW((isHos ? 485 : 500) + Math.round((b * 85) / 100));
-    let w600 = clampW((isHos ? 550 : 600) + Math.round((b * 65) / 100));
-    let w700 = clampW((isHos ? 650 : 700) + Math.round((b * 55) / 100));
+    const aospBase = {
+      100: 160, 200: 240, 300: 320, 350: 380, 400: 400,
+      500: 500, 600: 570, 700: 650, 800: 740, 900: 830, 950: 900,
+    };
+    const hosBase = {
+      100: 170, 200: 250, 300: 340, 350: 400, 400: 400,
+      500: 485, 600: 535, 700: 550, 800: 650, 900: 740, 950: 830,
+    };
+    const base = (isAosp ? aospBase : hosBase)[slot] ?? slot;
 
+    let cdelta = 0;
     if (contrast === "soft") {
-      w600 = clampW(w600 - 25);
-      w700 = clampW(w700 - 30);
+      if (slot === 600) cdelta = -25;
+      else if (slot === 700) cdelta = -30;
+      else if (slot === 800) cdelta = -35;
+      else if (slot === 900) cdelta = -30;
     } else if (contrast === "apple_native") {
-      w600 = clampW(w600 + 35);
-      w700 = clampW(w700 + 40);
+      if (slot === 600) cdelta = 25;
+      else if (slot === 700) cdelta = 45;
+      else if (slot === 800) cdelta = 45;
+      else if (slot === 900) cdelta = 40;
     }
 
-    if (w500 < w400 + 45) w500 = clampW(w400 + 45);
-    if (w600 < w500 + 45) w600 = clampW(w500 + 45);
-    if (w700 < w600 + 55) w700 = clampW(w600 + 55);
+    let bdelta;
+    if (slot === 100 || slot === 200 || slot === 900 || slot === 950) {
+      bdelta = Math.trunc(b / 2);
+    } else if (slot === 300 || slot === 800) {
+      bdelta = Math.trunc((b * 3) / 4);
+    } else {
+      bdelta = b;
+    }
 
-    return { w400, w500, w600, w700 };
+    return Math.max(100, Math.min(950, base + cdelta + bdelta));
+  }
+
+  function computeCurveWeights(curve, bias, contrast) {
+    const b = clampBias(bias);
+    const isAosp = curve === "aosp_linear";
+    // On HyperOS, mipro-demibold maps to slot 700 (550) and mipro-semibold maps to slot 800 (650);
+    // on AOSP, standard UI headers/bold map to slots 600 (570) and 700 (650).
+    return {
+      w400: calcWght(400, curve, b, contrast),
+      w500: calcWght(500, curve, b, contrast),
+      w600: calcWght(isAosp ? 600 : 700, curve, b, contrast),
+      w700: calcWght(isAosp ? 700 : 800, curve, b, contrast),
+    };
   }
 
   function showToast(msg, isWarn) {
@@ -113,20 +146,27 @@
     }
   }
 
+  function syncTabButtons(activeIdx) {
+    document.querySelectorAll(".tab-btn").forEach((b, i) => {
+      const active = i === activeIdx;
+      b.classList.toggle("active", active);
+      b.setAttribute("aria-selected", active ? "true" : "false");
+    });
+  }
+
   function switchTab(tabId) {
     if (!TAB_TITLES[tabId]) tabId = "typography";
     currentTabIndex = Math.max(0, TAB_ORDER.indexOf(tabId));
     document.querySelectorAll(".tab-panel").forEach((p) => {
       p.classList.toggle("active", p.dataset.tab === tabId);
     });
-    document.querySelectorAll(".tab-btn").forEach((b) => {
-      const active = b.dataset.tabTarget === tabId;
-      b.classList.toggle("active", active);
-      b.setAttribute("aria-selected", active ? "true" : "false");
-    });
+    syncTabButtons(currentTabIndex);
     positionTabLens(currentTabIndex, 0, false);
     const navTitle = document.getElementById("nav-title");
     if (navTitle) navTitle.textContent = TAB_TITLES[tabId];
+    if (tabId === "engine") {
+      refreshTelemetryOnly();
+    }
     try {
       sessionStorage.setItem("ct_active_tab", tabId);
     } catch (_) {}
@@ -136,18 +176,29 @@
     const dock = document.getElementById("ios-tabbar");
     if (dock) {
       let dragging = false;
+      let captured = false;
+      let pointerId = null;
       let startX = 0;
       let startIdx = 0;
       let moved = false;
 
+      const releaseCapture = () => {
+        if (captured && pointerId !== null) {
+          try {
+            dock.releasePointerCapture(pointerId);
+          } catch (_) {}
+        }
+        captured = false;
+        pointerId = null;
+      };
+
       dock.addEventListener("pointerdown", (e) => {
         dragging = true;
+        captured = false;
+        pointerId = e.pointerId;
         moved = false;
         startX = e.clientX;
         startIdx = currentTabIndex;
-        try {
-          dock.setPointerCapture(e.pointerId);
-        } catch (_) {}
       });
 
       dock.addEventListener("pointermove", (e) => {
@@ -155,7 +206,14 @@
         const rect = dock.getBoundingClientRect();
         const slotW = Math.max(1, (rect.width - 10) / 3);
         const dx = e.clientX - startX;
-        if (Math.abs(dx) > 6) moved = true;
+        if (!moved && Math.abs(dx) > 6) {
+          moved = true;
+          // Capture pointer only after real drag begins so simple taps always reach .tab-btn click
+          try {
+            dock.setPointerCapture(e.pointerId);
+            captured = true;
+          } catch (_) {}
+        }
         if (!moved) return;
 
         // Clamp lens travel strictly inside the 3-tab dock
@@ -165,18 +223,18 @@
         positionTabLens(startIdx, clampedDx, true);
 
         const hoverIdx = Math.max(0, Math.min(2, Math.round(startIdx + clampedDx / slotW)));
-        document.querySelectorAll(".tab-btn").forEach((b, i) => {
-          b.classList.toggle("active", i === hoverIdx);
-        });
+        syncTabButtons(hoverIdx);
       });
 
       const finishDrag = (e) => {
         if (!dragging) return;
         dragging = false;
+        releaseCapture();
         if (!moved) {
           positionTabLens(currentTabIndex, 0, false);
           return;
         }
+        suppressTabClickUntil = Date.now() + 250;
         const rect = dock.getBoundingClientRect();
         const slotW = Math.max(1, (rect.width - 10) / 3);
         const dx = e.clientX - startX;
@@ -187,6 +245,8 @@
       dock.addEventListener("pointerup", finishDrag);
       dock.addEventListener("pointercancel", () => {
         dragging = false;
+        releaseCapture();
+        syncTabButtons(currentTabIndex);
         positionTabLens(currentTabIndex, 0, false);
       });
     }
@@ -257,7 +317,9 @@
     document.querySelectorAll(".preset-pill").forEach((btn) => {
       const pBias = parseInt(btn.dataset.bias, 10);
       const pContrast = btn.dataset.contrast;
-      btn.classList.toggle("selected", wantedBias === pBias && wantedContrast === pContrast);
+      const isSelected = wantedBias === pBias && wantedContrast === pContrast;
+      btn.classList.toggle("selected", isSelected);
+      btn.setAttribute("aria-pressed", isSelected ? "true" : "false");
     });
   }
 
@@ -351,13 +413,17 @@
 
   function selectProfileRow(profile) {
     document.querySelectorAll(".ios-check-row").forEach((el) => {
-      el.classList.toggle("selected", el.dataset.profile === profile);
+      const selected = el.dataset.profile === profile;
+      el.classList.toggle("selected", selected);
+      el.setAttribute("aria-checked", selected ? "true" : "false");
     });
   }
 
   function selectContrast(contrast) {
     document.querySelectorAll(".seg-btn").forEach((el) => {
-      el.classList.toggle("selected", el.dataset.contrast === contrast);
+      const selected = el.dataset.contrast === contrast;
+      el.classList.toggle("selected", selected);
+      el.setAttribute("aria-checked", selected ? "true" : "false");
     });
   }
 
@@ -371,9 +437,47 @@
     document.getElementById("reboot-banner").classList.toggle("hidden", !dirty);
   }
 
+  // Build a Toybox/BusyBox/GNU-safe atomic multi-key shell update command (zero parallel .tmp collisions)
+  function buildWriteConfCommand(entries, confFile) {
+    const target = confFile || CONF_FILE;
+    const pairs = Object.entries(entries).filter(
+      ([k, v]) => CONF_KEY_RE.test(k) && CONF_VAL_RE.test(String(v))
+    );
+    if (!pairs.length) return null;
+
+    const specArg = pairs.map(([k, v]) => `${k}=${v}`).join(" ");
+    const printfArgs = pairs.map(([k, v]) => `'${k}=${v}'`).join(" ");
+    return [
+      `mkdir -p "$(dirname "${target}")"`,
+      `_tmp="${target}.tmp.$$"`,
+      `if [ -f "${target}" ]; then`,
+      `  awk -F= -v spec='${specArg}' '`,
+      `    BEGIN { n = split(spec, arr, " "); for (i = 1; i <= n; i++) { p = index(arr[i], "="); if (p > 1) { k = substr(arr[i], 1, p - 1); kv[k] = substr(arr[i], p + 1); order[++m] = k } } }`,
+      `    ($1 in kv) { print $1 "=" kv[$1]; seen[$1] = 1; next }`,
+      `    { print }`,
+      `    END { for (i = 1; i <= m; i++) { k = order[i]; if (!seen[k]) print k "=" kv[k] } }`,
+      `  ' "${target}" > "$_tmp" && mv "$_tmp" "${target}" || { rm -f "$_tmp"; exit 1; }`,
+      `else`,
+      `  printf '%s\\n' ${printfArgs} > "$_tmp" && mv "$_tmp" "${target}" || { rm -f "$_tmp"; exit 1; }`,
+      `fi`,
+    ].join("\n");
+  }
+
+  // Serialized, atomic multi-key config writer (eliminates parallel .tmp collisions & lost updates)
+  function writeConfKeys(entries) {
+    const cmd = buildWriteConfCommand(entries, CONF_FILE);
+    if (!cmd) {
+      return Promise.resolve({ code: 1, out: "", err: "Invalid config key/value" });
+    }
+
+    const task = () => execShell(cmd);
+    const next = confWriteChain.then(task, task);
+    confWriteChain = next.catch(() => {});
+    return next;
+  }
+
   function writeConfKey(key, val) {
-    const cmd = `mkdir -p /data/adb/coretype && if [ -f ${CONF_FILE} ]; then awk -F= -v k='${key}' -v v='${val}' 'BEGIN{d=0} $1==k{print k"="v;d=1;next} {print} END{if(!d)print k"="v}' ${CONF_FILE} > ${CONF_FILE}.tmp && mv ${CONF_FILE}.tmp ${CONF_FILE}; else printf '%s=%s\\n' '${key}' '${val}' > ${CONF_FILE}; fi`;
-    return execShell(cmd);
+    return writeConfKeys({ [key]: val });
   }
 
   async function refreshTelemetryOnly() {
@@ -444,8 +548,12 @@
     badge.textContent = isActive ? "Active" : st.status === "safe_disabled" ? "Safe Mode" : "Degraded";
     badge.className = "status-pill " + (isActive ? "badge-active" : "badge-warn");
 
-    wantedProfile = cf.profile || st.profile || "dynamic_optical";
-    appliedProfile = cf.applied_profile || st.profile || "dynamic_optical";
+    wantedProfile = VALID_PROFILES.includes(cf.profile)
+      ? cf.profile
+      : (VALID_PROFILES.includes(st.profile) ? st.profile : "dynamic_optical");
+    appliedProfile = VALID_PROFILES.includes(cf.applied_profile)
+      ? cf.applied_profile
+      : (VALID_PROFILES.includes(st.profile) ? st.profile : "dynamic_optical");
     selectProfileRow(wantedProfile);
 
     romCurve = st.rom_curve || cf.rom_curve || "hyperos_mipro";
@@ -479,11 +587,11 @@
 
     const { gl, ge } = renderLiveTelemetry(tm, st);
     const curveTag = romCurve === "aosp_linear" ? "AOSP Linear" : "HyperOS Auto";
-    const biasTag = wantedBias > 0 ? `+${wantedBias}` : `${wantedBias}`;
+    const appliedBiasTag = appliedBias > 0 ? `+${appliedBias}` : `${appliedBias}`;
 
     document.getElementById("kv-profile").textContent = st.profile_label || appliedProfile;
     document.getElementById("kv-curve").textContent =
-      `${curveTag} · Bias ${biasTag} · ${st.contrast_label || wantedContrast}`;
+      `${curveTag} · Bias ${appliedBiasTag} · ${st.contrast_label || appliedContrast}`;
     document.getElementById("kv-flex").textContent = st.slot_flex
       ? `${st.slot_flex.replace(".ttf", "")} (opsz 17→28 · FV)`
       : "Shared Text Slot";
@@ -520,22 +628,31 @@
   function setupListeners() {
     // 3-Tab Bottom Dock
     document.querySelectorAll(".tab-btn").forEach((btn) => {
-      btn.addEventListener("click", () => switchTab(btn.dataset.tabTarget));
+      btn.addEventListener("click", () => {
+        if (Date.now() < suppressTabClickUntil) return;
+        switchTab(btn.dataset.tabTarget);
+      });
     });
 
-    // Quick Presets (One-Tap Curve)
+    // Quick Presets (One-Tap Curve — single atomic config write)
     document.querySelectorAll(".preset-pill").forEach((btn) => {
       btn.addEventListener("click", async () => {
+        const nextContrast = btn.dataset.contrast;
+        if (!VALID_CONTRASTS.includes(nextContrast)) return;
         wantedBias = clampBias(btn.dataset.bias);
-        wantedContrast = btn.dataset.contrast;
+        wantedContrast = nextContrast;
         document.getElementById("weight-bias-slider").value = String(wantedBias);
         selectContrast(wantedContrast);
         updateLiveSpecimen();
         updateRebootBanner();
-        await Promise.all([
-          writeConfKey("weight_bias", String(wantedBias)),
-          writeConfKey("contrast_mode", wantedContrast),
-        ]);
+        const res = await writeConfKeys({
+          weight_bias: String(wantedBias),
+          contrast_mode: wantedContrast,
+        });
+        if (res.code > 0) {
+          showToast("Failed to save preset", true);
+          return;
+        }
         showToast(`${btn.querySelector(".preset-name").textContent} saved · Reboot to apply`, true);
       });
     });
@@ -549,7 +666,8 @@
     });
     biasSlider.addEventListener("change", async () => {
       wantedBias = clampBias(biasSlider.value);
-      await writeConfKey("weight_bias", String(wantedBias));
+      const res = await writeConfKey("weight_bias", String(wantedBias));
+      if (res.code > 0) showToast("Failed to save Weight Bias", true);
       updateRebootBanner();
     });
 
@@ -557,20 +675,21 @@
       wantedBias = 0;
       biasSlider.value = "0";
       updateLiveSpecimen();
-      await writeConfKey("weight_bias", "0");
+      const res = await writeConfKey("weight_bias", "0");
       updateRebootBanner();
-      showToast("Weight Bias reset to 0");
+      showToast(res.code > 0 ? "Failed to reset Weight Bias" : "Weight Bias reset to 0", res.code > 0);
     });
 
     // Header Contrast Segmented Control
     document.querySelectorAll(".seg-btn").forEach((btn) => {
       btn.addEventListener("click", async () => {
         const c = btn.dataset.contrast;
-        if (!c || c === wantedContrast) return;
+        if (!VALID_CONTRASTS.includes(c) || c === wantedContrast) return;
         wantedContrast = c;
         selectContrast(c);
         updateLiveSpecimen();
-        await writeConfKey("contrast_mode", c);
+        const res = await writeConfKey("contrast_mode", c);
+        if (res.code > 0) showToast("Failed to save Header Contrast", true);
         updateRebootBanner();
       });
     });
@@ -579,10 +698,11 @@
     document.querySelectorAll(".ios-check-row").forEach((btn) => {
       btn.addEventListener("click", async () => {
         const next = btn.dataset.profile;
-        if (!next || next === wantedProfile) return;
+        if (!VALID_PROFILES.includes(next) || next === wantedProfile) return;
         wantedProfile = next;
         selectProfileRow(next);
-        await writeConfKey("profile", next);
+        const res = await writeConfKey("profile", next);
+        if (res.code > 0) showToast("Failed to save Optical Profile", true);
         updateRebootBanner();
       });
     });
@@ -591,28 +711,57 @@
     const gmsToggle = document.getElementById("gms-fonts-toggle");
     gmsToggle.addEventListener("change", async () => {
       const enabled = gmsToggle.checked;
-      await writeConfKey("gms_fonts_enabled", enabled ? "1" : "0");
-      const res = await execShell(`sh ${ACTION_SCRIPT} 2>&1`);
-      if (res.code === -1) {
-        showToast(enabled ? "GMS Fonts ON · Applied live" : "GMS Fonts OFF · Detached live");
-        return;
+      gmsToggle.disabled = true;
+      try {
+        const wres = await writeConfKey("gms_fonts_enabled", enabled ? "1" : "0");
+        if (wres.code > 0) {
+          gmsToggle.checked = !enabled;
+          showToast("Failed to update GMS config", true);
+          return;
+        }
+        const res = await execShell(`sh ${ACTION_SCRIPT} 2>&1`);
+        if (res.code === -1) {
+          showToast(enabled ? "GMS Fonts ON · Applied live" : "GMS Fonts OFF · Detached live");
+          return;
+        }
+        if (res.code !== 0) {
+          showToast("GMS live sync failed", true);
+          return;
+        }
+        await refreshTelemetryOnly();
+        showToast(
+          enabled ? "GMS Fonts ON · Applied live (0 reboot)" : "GMS Fonts OFF · Detached live (0 reboot)"
+        );
+      } finally {
+        gmsToggle.disabled = false;
       }
-      await refreshTelemetryOnly();
-      showToast(
-        enabled ? "GMS Fonts ON · Applied live (0 reboot)" : "GMS Fonts OFF · Detached live (0 reboot)"
-      );
     });
 
     // Apple iOS Emoji Toggle
     const emojiToggle = document.getElementById("emoji-toggle");
     emojiToggle.addEventListener("change", async () => {
       if (!emojiAvailable) return;
-      wantedEmoji = emojiToggle.checked;
-      await writeConfKey("emoji_enabled", wantedEmoji ? "1" : "0");
-      await execShell(`sh ${ACTION_SCRIPT} 2>&1`);
-      await refreshTelemetryOnly();
-      updateRebootBanner();
-      showToast("Emoji cache synced · Reboot for system slot", true);
+      const next = emojiToggle.checked;
+      emojiToggle.disabled = true;
+      try {
+        const wres = await writeConfKey("emoji_enabled", next ? "1" : "0");
+        if (wres.code > 0) {
+          emojiToggle.checked = !next;
+          showToast("Failed to update Emoji config", true);
+          return;
+        }
+        wantedEmoji = next;
+        const res = await execShell(`sh ${ACTION_SCRIPT} 2>&1`);
+        await refreshTelemetryOnly();
+        updateRebootBanner();
+        if (res.code > 0) {
+          showToast("Emoji config saved · Reboot to apply", true);
+        } else {
+          showToast("Emoji cache synced · Reboot for system slot", true);
+        }
+      } finally {
+        emojiToggle.disabled = !emojiAvailable;
+      }
     });
 
     // Instant GMS Sync Button
@@ -620,17 +769,24 @@
     syncBtn.addEventListener("click", async () => {
       syncBtn.disabled = true;
       syncBtn.textContent = "Syncing…";
-      const res = await execShell(`sh ${ACTION_SCRIPT} 2>&1`);
-      if (res.code === -1) {
-        showToast("Preview · SIGUSR1 (< 5 ms)");
-      } else {
-        const msg = (res.out || "Synced").trim().split(/\r?\n/).pop();
-        document.getElementById("sync-gms-desc").textContent = msg;
-        await refreshTelemetryOnly();
-        showToast("GMS Synced via SIGUSR1");
+      try {
+        const res = await execShell(`sh ${ACTION_SCRIPT} 2>&1`);
+        if (res.code === -1) {
+          showToast("Preview · SIGUSR1 (< 5 ms)");
+        } else if (res.code !== 0) {
+          const errMsg = (res.out || res.err || "Sync failed").trim().split(/\r?\n/).pop();
+          document.getElementById("sync-gms-desc").textContent = errMsg;
+          showToast("GMS Sync failed", true);
+        } else {
+          const msg = (res.out || "Synced").trim().split(/\r?\n/).pop();
+          document.getElementById("sync-gms-desc").textContent = msg;
+          await refreshTelemetryOnly();
+          showToast("GMS Synced via SIGUSR1");
+        }
+      } finally {
+        syncBtn.textContent = "Sync Now";
+        syncBtn.disabled = false;
       }
-      syncBtn.textContent = "Sync Now";
-      syncBtn.disabled = false;
     });
 
     // One-Tap Diagnostic Bundle
@@ -638,16 +794,23 @@
     diagBtn.addEventListener("click", async () => {
       diagBtn.disabled = true;
       diagBtn.textContent = "Exporting…";
-      const res = await execShell(`sh ${ACTION_SCRIPT} --diag 2>&1`);
-      if (res.code === -1) {
-        showToast("Preview · /sdcard/Download/coretype-diag.txt");
-      } else {
-        const msg = (res.out || "Exported").trim().split(/\r?\n/).pop();
-        document.getElementById("diag-desc").textContent = msg;
-        showToast("Diagnostic exported to Download");
+      try {
+        const res = await execShell(`sh ${ACTION_SCRIPT} --diag 2>&1`);
+        if (res.code === -1) {
+          showToast("Preview · /sdcard/Download/coretype-diag.txt");
+        } else if (res.code !== 0) {
+          const errMsg = (res.out || res.err || "Export failed").trim().split(/\r?\n/).pop();
+          document.getElementById("diag-desc").textContent = errMsg;
+          showToast("Diagnostic export failed", true);
+        } else {
+          const msg = (res.out || "Exported").trim().split(/\r?\n/).pop();
+          document.getElementById("diag-desc").textContent = msg;
+          showToast("Diagnostic exported to Download");
+        }
+      } finally {
+        diagBtn.textContent = "Export";
+        diagBtn.disabled = false;
       }
-      diagBtn.textContent = "Export";
-      diagBtn.disabled = false;
     });
 
     // Tinted Solid Surfaces Accessibility Toggle
@@ -671,6 +834,11 @@
       const lastTab = sessionStorage.getItem("ct_active_tab");
       if (lastTab && TAB_TITLES[lastTab]) switchTab(lastTab);
     } catch (_) {}
+  }
+
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = { calcWght, computeCurveWeights, clampBias, parseProps, buildWriteConfCommand };
+    return;
   }
 
   document.addEventListener("DOMContentLoaded", () => {

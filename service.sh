@@ -41,8 +41,8 @@ ct_load_slots
 
 # Verify mounted stock font slots match CoreType's optical master byte sizes
 _font_ok="0"
-_want_sz=$(wc -c < "$MODDIR/fonts/CoreType-SFPro-Text.ttf" 2>/dev/null || echo 0)
-_live_sz=$(wc -c < "/system/fonts/$CT_SLOT_TEXT" 2>/dev/null || echo 1)
+_want_sz=$(ct_file_size "$MODDIR/fonts/CoreType-SFPro-Text.ttf")
+_live_sz=$(ct_file_size "/system/fonts/$CT_SLOT_TEXT")
 if [ "$_want_sz" -gt 102400 ] && [ "$_want_sz" = "$_live_sz" ]; then
     _font_ok="1"
 fi
@@ -50,7 +50,7 @@ fi
 # Verify /product/fonts/MiSansVF.ttf mount status when MiSans slider is active
 _misans_prod_ok="0"
 if [ "${CT_MISANS_SLIDER_ACTIVE:-0}" = "1" ] && [ -r /product/fonts/MiSansVF.ttf ]; then
-    _mlive_sz=$(wc -c < /product/fonts/MiSansVF.ttf 2>/dev/null || echo 1)
+    _mlive_sz=$(ct_file_size /product/fonts/MiSansVF.ttf)
     if [ "$_want_sz" -gt 102400 ] && [ "$_want_sz" = "$_mlive_sz" ]; then
         _misans_prod_ok="1"
     fi
@@ -62,10 +62,18 @@ if [ -r /system/etc/font_fallback.xml ] \
     && grep -q 'CoreType Dual-Optical' /system/etc/font_fallback.xml 2>/dev/null; then
     _xml_ok="1"
     _xml_active="font_fallback.xml"
+elif [ -r /system_ext/etc/hyper_font_fallback.xml ] \
+    && grep -q 'CoreType Dual-Optical' /system_ext/etc/hyper_font_fallback.xml 2>/dev/null; then
+    _xml_ok="1"
+    _xml_active="hyper_font_fallback.xml"
 elif [ -r /system/etc/fonts.xml ] \
     && grep -q 'CoreType Dual-Optical' /system/etc/fonts.xml 2>/dev/null; then
     _xml_ok="1"
     _xml_active="fonts.xml"
+elif [ -r /system_ext/etc/hyper_fonts.xml ] \
+    && grep -q 'CoreType Dual-Optical' /system_ext/etc/hyper_fonts.xml 2>/dev/null; then
+    _xml_ok="1"
+    _xml_active="hyper_fonts.xml"
 fi
 
 if [ "$_font_ok" = "1" ] && [ "$_xml_ok" = "1" ]; then
@@ -74,15 +82,15 @@ else
     _status="degraded"
 fi
 
-_want_gms_fonts=$(ct_conf_get "applied_gms_fonts" "1")
-_want_emoji=$(ct_conf_get "applied_emoji" "1")
+_want_gms_fonts=$(ct_conf_get "gms_fonts_enabled" "$(ct_conf_get "applied_gms_fonts" "1")")
+_want_emoji=$(ct_conf_get "applied_emoji" "$(ct_conf_get "emoji_enabled" "1")")
 _emoji_avail="0"
 _emoji_active="0"
 if ct_emoji_master_valid "$MODDIR/fonts/CoreType-AppleEmoji.ttf"; then
     _emoji_avail="1"
     if [ "$_want_emoji" = "1" ]; then
-        _ewant=$(wc -c < "$MODDIR/fonts/CoreType-AppleEmoji.ttf" 2>/dev/null || echo 0)
-        _elive=$(wc -c < /system/fonts/NotoColorEmoji.ttf 2>/dev/null || echo 1)
+        _ewant=$(ct_file_size "$MODDIR/fonts/CoreType-AppleEmoji.ttf")
+        _elive=$(ct_file_size /system/fonts/NotoColorEmoji.ttf)
         if [ "$_ewant" -gt 5242880 ] && [ "$_ewant" = "$_elive" ]; then
             _emoji_active="1"
         fi
@@ -132,6 +140,7 @@ ct_write_fallback_telemetry() {
     mkdir -p "$CT_RUN_DIR" 2>/dev/null || true
     chmod 0755 "$CT_RUN_DIR" 2>/dev/null || true
     _tfile="$CT_RUN_DIR/telemetry.prop"
+    _ttmp="$_tfile.tmp.$$"
     if {
         printf 'daemon_mode=shell-fallback\n'
         printf 'daemon_pid=%s\n' "$$"
@@ -145,10 +154,11 @@ ct_write_fallback_telemetry() {
         printf 'last_sync_latency_us=0\n'
         printf 'active_text_tracking_upm=-46\n'
         printf 'active_display_tracking_upm=-26\n'
-    } > "$_tfile.tmp.$$" 2>/dev/null; then
-        mv "$_tfile.tmp.$$" "$_tfile" 2>/dev/null || true
+    } > "$_ttmp" 2>/dev/null && mv "$_ttmp" "$_tfile" 2>/dev/null; then
+        chmod 0644 "$_tfile" 2>/dev/null || true
+    else
+        rm -f "$_ttmp" 2>/dev/null || true
     fi
-    chmod 0644 "$_tfile" 2>/dev/null || true
 }
 
 CT_GMS_FONTS_BOUND=0
@@ -187,11 +197,16 @@ mkdir -p "$CT_RUN_DIR" 2>/dev/null || true
 chmod 0755 "$CT_RUN_DIR" 2>/dev/null || true
 if [ -r "$CT_RUN_DIR/watchd.pid" ]; then
     _old_pid=$(tr -cd '0-9' < "$CT_RUN_DIR/watchd.pid" 2>/dev/null)
-    if [ -n "$_old_pid" ] && [ "$_old_pid" != "$$" ]; then
-        kill "$_old_pid" 2>/dev/null || true
+    if [ -n "$_old_pid" ] && [ "$_old_pid" != "$$" ] \
+        && ct_pid_matches "$_old_pid" 'coretype-watchd|service\.sh'; then
+        kill -TERM "$_old_pid" 2>/dev/null || true
     fi
 fi
 printf '%s\n' "$$" > "$CT_RUN_DIR/watchd.pid" 2>/dev/null || true
+
+_fallback_stop=0
+trap '_fallback_stop=1' TERM INT
+trap ':' USR1
 
 ct_run_gms_sync() {
     CT_GMS_FONTS_BOUND=0
@@ -205,7 +220,7 @@ ct_run_gms_sync() {
         for _um in /data/data/com.google.android.gms/files/fonts/opentype/*.ttf; do
             [ -f "$_um" ] || continue
             ct_gms_is_latin_ui_font "${_um##*/}" || continue
-            if grep -Fq " $_um " /proc/mounts 2>/dev/null; then
+            if ct_is_mounted "$_um"; then
                 umount -l "$_um" 2>/dev/null || true
             fi
         done
@@ -215,7 +230,7 @@ ct_run_gms_sync() {
     else
         for _ue in /data/fonts/files/*/NotoColorEmoji.ttf /data/data/com.google.android.gms/files/fonts/opentype/*[Ee]moji*.ttf; do
             [ -f "$_ue" ] || continue
-            if grep -Fq " $_ue " /proc/mounts 2>/dev/null; then
+            if ct_is_mounted "$_ue"; then
                 umount -l "$_ue" 2>/dev/null || true
             fi
         done
@@ -229,9 +244,12 @@ ct_write_fallback_telemetry "$_sync_n"
 ct_log "Boot verify: status=$_status profile=$CT_PROFILE watcher=shell-fallback gms_fonts=${CT_GMS_FONTS_BOUND:-0} gms_emoji=${CT_GMS_EMOJI_BOUND:-0} guard=$_guard_state"
 ct_trim_log
 
-while [ -d "$MODDIR" ] && [ ! -f "$MODDIR/disable" ] && [ ! -f "$MODDIR/remove" ]; do
-    sleep 60
-    if [ ! -d "$MODDIR" ] || [ -f "$MODDIR/disable" ] || [ -f "$MODDIR/remove" ]; then
+while [ "$_fallback_stop" = "0" ] && [ -d "$MODDIR" ] && [ ! -f "$MODDIR/disable" ] && [ ! -f "$MODDIR/remove" ]; do
+    sleep 60 &
+    _spid=$!
+    wait "$_spid" 2>/dev/null || true
+    kill "$_spid" 2>/dev/null || true
+    if [ "$_fallback_stop" != "0" ] || [ ! -d "$MODDIR" ] || [ -f "$MODDIR/disable" ] || [ -f "$MODDIR/remove" ]; then
         break
     fi
     ct_run_gms_sync

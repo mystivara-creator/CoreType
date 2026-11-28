@@ -1,25 +1,17 @@
 #!/usr/bin/env python3
 """
-CoreType Font Engineering Pipeline (v1.0.0 — Dual Optical Master + Apple trak Engine)
+CoreType Font Engineering Pipeline (v1.2.1 — Dual Optical Master + Dynamic opsz GPOS Engine)
 
-Transforms official Apple SF-Pro.ttf & SF-Pro-Italic.ttf into FOUR ultra-lean,
-optical-calibrated Variable Fonts for Android 12–16 & HyperOS 2/3/4:
+Transforms official Apple SF-Pro.ttf & SF-Pro-Italic.ttf into FIVE ultra-lean,
+optical-calibrated Variable Fonts + TWO GMS static instances for Android 12–17 & HyperOS 1–4:
 
-  1. CoreType-SFPro-Text.ttf        (opsz=17 pinned, wght 1..1000 + wdth 30..150, Apple Text trak baked via GPOS)
-  2. CoreType-SFPro-Text-Italic.ttf (opsz=17 pinned, wght 1..1000, Apple Text trak baked via GPOS)
-  3. CoreType-SFPro-Display.ttf     (opsz=28 pinned, wght 1..1000 + wdth 30..150, Apple Display trak baked via GPOS)
-  4. CoreType-SFPro-Display-Italic.ttf (opsz=28 pinned, wght 1..1000, Apple Display trak baked via GPOS)
-
-Why Dual Optical Masters + GPOS Tracking?
-  - Android's HarfBuzz/Minikin ignores Apple's AAT `trak` table, which is the #1 reason
-    raw SF Pro looks too loose, flat, and 12–15% too wide on Android.
-  - By baking Apple's real iOS `trak` values directly into a non-destructive OpenType
-    GPOS `kern` SinglePos lookup (applied AFTER Apple's native PairPos kerning), we:
-      * Preserve 100% pure, undistorted Apple SF Pro letter shapes (`glyf`/`gvar`/`HVAR` untouched!)
-      * Match Upright & Italic widths 1:1 (even though SF-Pro-Italic lacks a `wdth` axis)
-      * Deliver unmistakable iOS Header (Display opsz=28) vs Body (Text opsz=17) contrast
-      * Keep full Variable Weight (`wght` 1..1000) so HyperOS's Font Weight slider works natively
-      * Cut total font size dramatically (~40 MB raw -> ~3 MB total across all 4 masters)
+  1. CoreType-SFPro-Text.ttf           (opsz=17 pinned, wght 100..950 + wdth 75..100, -46 UPM GPOS)
+  2. CoreType-SFPro-Text-Italic.ttf    (opsz=17 pinned, wght 100..950, -46 UPM GPOS)
+  3. CoreType-SFPro-Display.ttf        (opsz=28 pinned, wght 100..950 + wdth 75..100, -26 UPM GPOS)
+  4. CoreType-SFPro-Display-Italic.ttf (opsz=28 pinned, wght 100..950, -26 UPM GPOS)
+  5. CoreType-SFPro-Flex.ttf           (continuous opsz 17..28 + GPOS 1.1 FeatureVariations -46 -> -26 UPM)
+  6. CoreType-SFPro-GMS-Medium.ttf     (static Text Medium wght=500, opsz=17 for GMS FontsProvider)
+  7. CoreType-SFPro-GMS-Bold.ttf       (static Semi-Display Semibold wght=600, opsz=24 for GMS FontsProvider)
 """
 
 import argparse
@@ -53,8 +45,8 @@ ANDROID_WIN_DESCENT = 492
 # - Text (16–17pt iOS UI): Apple `trak` track 0.0 is -40..-52 UPM -> bake -46 UPM (+ mild wdth=96.5 default)
 # - Display (24–36pt Headers / Clocks): Display glyphs are already ~100 UPM tighter than Text;
 #   bake -26 UPM Display tracking (+ mild wdth=97.0 default) for crisp, punchy iOS headlines.
-# - Flex (Continuous opsz 12..36 for RobotoFlex / Material 3 / Jetpack Compose): preserves live
-#   continuous `opsz` axis (12..36) with balanced -36 UPM tracking & pure 0 UPM tabular digits.
+# - Flex (Continuous opsz 17..28 for RobotoFlex / Material 3 / Jetpack Compose): preserves live
+#   continuous `opsz` axis (17..28) with GPOS 1.1 FeatureVariations (-46 Text -> -26 Display at opsz>=22).
 OPTICAL_SPECS = [
     {
         "src": "SF-Pro.ttf",
@@ -201,7 +193,7 @@ def is_kept_unicode(cp: int) -> bool:
     if (0xE000 <= cp <= 0xF8FF) or cp >= 0xF0000:
         return False
     # Preserve BOM & Replacement chars; let ROM's native Arabic fonts handle Arabic blocks
-    if (0x0600 <= cp <= 0x06FF) or (0x0750 <= cp <= 0x077F) or (0x08A0 <= cp <= 0x08FF):
+    if (0x0600 <= cp <= 0x06FF) or (0x0750 <= cp <= 0x077F) or (0x0870 <= cp <= 0x08FF):
         return False
     if (0xFB50 <= cp <= 0xFDFF) or (0xFE70 <= cp <= 0xFEFE):
         return False
@@ -471,18 +463,32 @@ def calibrate_vertical_metrics(font: "TTFont") -> None:
     os2.fsSelection |= 1 << 7
 
 
-def set_name_records(font: "TTFont", family: str, subfamily: str, ps_name: str) -> None:
-    """Stamp clean CoreType naming records for Android font_fallback.xml postScriptName matching."""
-    name_table = font["name"]
+RIBBI_SUBFAMILIES = {"Regular", "Italic", "Bold", "Bold Italic"}
+
+
+def build_name_records(family: str, subfamily: str, ps_name: str) -> dict:
+    """Compute OpenType RIBBI-compliant name table entries (IDs 1, 2, 4, 6, 16, 17)."""
     full_name = f"{family} {subfamily}" if subfamily != "Regular" else family
-    records = {
-        1: family,
-        2: subfamily,
+    if subfamily in RIBBI_SUBFAMILIES:
+        legacy_family = family
+        legacy_subfamily = subfamily
+    else:
+        legacy_family = f"{family} {subfamily}"
+        legacy_subfamily = "Regular"
+    return {
+        1: legacy_family,
+        2: legacy_subfamily,
         4: full_name,
         6: ps_name,
         16: family,
         17: subfamily,
     }
+
+
+def set_name_records(font: "TTFont", family: str, subfamily: str, ps_name: str) -> None:
+    """Stamp clean CoreType naming records for Android font_fallback.xml postScriptName matching."""
+    name_table = font["name"]
+    records = build_name_records(family, subfamily, ps_name)
     for name_id, value in records.items():
         name_table.setName(value, name_id, 3, 1, 0x0409)  # Windows Unicode BMP en-US
         name_table.setName(value, name_id, 1, 0, 0)       # Mac Roman English
@@ -491,49 +497,49 @@ def set_name_records(font: "TTFont", family: str, subfamily: str, ps_name: str) 
 def build_optical_master(src_path: Path, out_path: Path, spec: dict) -> None:
     """Build one optical-calibrated Variable Font master (Text, Display, or Continuous-opsz Flex)."""
     print(f"[CoreType] Building {spec['out']} from {src_path.name} ...")
-    font = TTFont(str(src_path))
-    orig_glyphs = len(font.getGlyphOrder())
+    with TTFont(str(src_path)) as font:
+        orig_glyphs = len(font.getGlyphOrder())
 
-    subset_font(font)
-    sub_glyphs = len(font.getGlyphOrder())
-    print(f"           subset: {orig_glyphs} -> {sub_glyphs} glyphs")
+        subset_font(font)
+        sub_glyphs = len(font.getGlyphOrder())
+        print(f"           subset: {orig_glyphs} -> {sub_glyphs} glyphs")
 
-    # Pin `opsz` for Text (17.0) / Display (28.0) or keep continuous (12.0, 17.0, 36.0) for Flex.
-    # Prune unused `wdth` extremes (<75 / >100) and `wght` extremes (<100 / >950).
-    axis_limits = {
-        "opsz": spec["opsz"],
-        "wght": (100.0, 400.0, 950.0),
-    }
-    if spec["default_wdth"] is not None:
-        axis_limits["wdth"] = (75.0, spec["default_wdth"], 100.0)
-    if spec["is_italic"] and "fvar" in font:
-        if any(a.axisTag == "YAXS" for a in font["fvar"].axes):
-            axis_limits["YAXS"] = 400.0
+        # Pin `opsz` for Text (17.0) / Display (28.0) or keep continuous (17.0, 17.0, 28.0) for Flex.
+        # Prune unused `wdth` extremes (<75 / >100) and `wght` extremes (<100 / >950).
+        axis_limits = {
+            "opsz": spec["opsz"],
+            "wght": (100.0, 400.0, 950.0),
+        }
+        if spec["default_wdth"] is not None:
+            axis_limits["wdth"] = (75.0, spec["default_wdth"], 100.0)
+        if spec["is_italic"] and "fvar" in font:
+            if any(a.axisTag == "YAXS" for a in font["fvar"].axes):
+                axis_limits["YAXS"] = 400.0
 
-    font = instantiateVariableFont(font, axis_limits, inplace=True)
+        font = instantiateVariableFont(font, axis_limits, inplace=True)
 
-    tracked, default_lookup_idx = bake_gpos_tracking(font, spec["track_units"], spec["space_track"])
-    fv_tracked = 0
-    if "display_track_units" in spec and default_lookup_idx is not None:
-        fv_tracked = bake_gpos_opsz_feature_variations(
-            font,
-            default_lookup_idx,
-            spec["display_track_units"],
-            spec["display_space_track"],
-            spec.get("opsz_switch_pt", 22.0),
-        )
-    calibrate_vertical_metrics(font)
-    set_name_records(font, spec["family"], spec["subfamily"], spec["ps_name"])
+        tracked, default_lookup_idx = bake_gpos_tracking(font, spec["track_units"], spec["space_track"])
+        fv_tracked = 0
+        if "display_track_units" in spec and default_lookup_idx is not None:
+            fv_tracked = bake_gpos_opsz_feature_variations(
+                font,
+                default_lookup_idx,
+                spec["display_track_units"],
+                spec["display_space_track"],
+                spec.get("opsz_switch_pt", 22.0),
+            )
+        calibrate_vertical_metrics(font)
+        set_name_records(font, spec["family"], spec["subfamily"], spec["ps_name"])
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    font.save(str(out_path))
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        font.save(str(out_path))
 
     # Reload verification to guarantee binary integrity
-    verify = TTFont(str(out_path))
-    axes_summary = [
-        f"{a.axisTag}({a.minValue:.0f}..{a.defaultValue:.1f}..{a.maxValue:.0f})"
-        for a in verify["fvar"].axes
-    ]
+    with TTFont(str(out_path)) as verify:
+        axes_summary = [
+            f"{a.axisTag}({a.minValue:.0f}..{a.defaultValue:.1f}..{a.maxValue:.0f})"
+            for a in verify["fvar"].axes
+        ]
     size_kb = out_path.stat().st_size / 1024.0
     fv_note = (
         f" + FeatureVariations(opsz>={spec.get('opsz_switch_pt', 22.0):.0f}: {spec['display_track_units']} UPM, {fv_tracked} glyphs)"
@@ -551,6 +557,7 @@ GMS_STATIC_SPECS = [
         "src_master": "CoreType-SFPro-Text.ttf",
         "out": "CoreType-SFPro-GMS-Medium.ttf",
         "coords": {"wght": 500.0, "wdth": 96.5},
+        "weight_class": 500,
         "family": "CoreType SF Pro Text",
         "subfamily": "Medium",
         "ps_name": "CoreTypeSFProText-Medium",
@@ -559,6 +566,7 @@ GMS_STATIC_SPECS = [
         "src_master": "CoreType-SFPro-Flex.ttf",
         "out": "CoreType-SFPro-GMS-Bold.ttf",
         "coords": {"opsz": 24.0, "wght": 600.0, "wdth": 97.0},
+        "weight_class": 600,
         "family": "CoreType SF Pro Display",
         "subfamily": "Semibold",
         "ps_name": "CoreTypeSFProDisplay-Semibold",
@@ -576,66 +584,77 @@ def build_gms_static_instances(out_dir: Path) -> None:
     for spec in GMS_STATIC_SPECS:
         src_path = out_dir / spec["src_master"]
         dst_path = out_dir / spec["out"]
-        font = TTFont(str(src_path))
-        font = instantiateVariableFont(font, spec["coords"], inplace=True)
-        calibrate_vertical_metrics(font)
-        set_name_records(font, spec["family"], spec["subfamily"], spec["ps_name"])
-        font.save(str(dst_path))
+        with TTFont(str(src_path)) as font:
+            font = instantiateVariableFont(font, spec["coords"], inplace=True)
+            calibrate_vertical_metrics(font)
+            os2 = font["OS/2"]
+            os2.usWeightClass = int(spec["weight_class"])
+            if spec["subfamily"] != "Regular":
+                os2.fsSelection &= ~(1 << 6)  # Clear REGULAR bit on non-Regular static instances
+            set_name_records(font, spec["family"], spec["subfamily"], spec["ps_name"])
+            font.save(str(dst_path))
         size_kb = dst_path.stat().st_size / 1024.0
         print(
             f"[CoreType] Built GMS static instance {dst_path.name} ({size_kb:.1f} KB) | "
-            f"coords={spec['coords']}"
+            f"coords={spec['coords']} weightClass={spec['weight_class']}"
         )
 
 
 def audit_built_fonts(out_dir: Path) -> None:
-    """Verify OS/2 & hhea vertical metrics parity, USE_TYPO_METRICS, and continuous opsz + FeatureVariations on Flex."""
+    """Verify OS/2 & hhea vertical metrics parity, USE_TYPO_METRICS, static GMS weightClass, and Flex opsz + FeatureVariations."""
+    gms_weight_map = {s["out"]: s["weight_class"] for s in GMS_STATIC_SPECS}
     expected_files = [s["out"] for s in OPTICAL_SPECS] + [s["out"] for s in GMS_STATIC_SPECS]
     for fname in expected_files:
         fpath = out_dir / fname
         if not fpath.is_file():
             raise RuntimeError(f"Missing expected built font: {fpath}")
-        font = TTFont(str(fpath))
-        upm = font["head"].unitsPerEm
-        hhea = font["hhea"]
-        os2 = font["OS/2"]
+        with TTFont(str(fpath)) as font:
+            upm = font["head"].unitsPerEm
+            hhea = font["hhea"]
+            os2 = font["OS/2"]
 
-        assert hhea.ascent == ANDROID_ASCENT == os2.sTypoAscender == os2.usWinAscent, (
-            f"Ascent mismatch in {fname}: hhea={hhea.ascent} typo={os2.sTypoAscender} win={os2.usWinAscent}"
-        )
-        assert hhea.descent == ANDROID_DESCENT == os2.sTypoDescender == -os2.usWinDescent, (
-            f"Descent mismatch in {fname}: hhea={hhea.descent} typo={os2.sTypoDescender} win={os2.usWinDescent}"
-        )
-        assert hhea.lineGap == 0 and os2.sTypoLineGap == 0, f"Non-zero lineGap in {fname}"
-        assert (os2.fsSelection & (1 << 7)) != 0, f"USE_TYPO_METRICS bit missing in {fname}"
+            assert hhea.ascent == ANDROID_ASCENT == os2.sTypoAscender == os2.usWinAscent, (
+                f"Ascent mismatch in {fname}: hhea={hhea.ascent} typo={os2.sTypoAscender} win={os2.usWinAscent}"
+            )
+            assert hhea.descent == ANDROID_DESCENT == os2.sTypoDescender == -os2.usWinDescent, (
+                f"Descent mismatch in {fname}: hhea={hhea.descent} typo={os2.sTypoDescender} win={os2.usWinDescent}"
+            )
+            assert hhea.lineGap == 0 and os2.sTypoLineGap == 0, f"Non-zero lineGap in {fname}"
+            assert (os2.fsSelection & (1 << 7)) != 0, f"USE_TYPO_METRICS bit missing in {fname}"
 
-        line_ratio = (os2.sTypoAscender - os2.sTypoDescender) / float(upm)
-        assert 1.17 <= line_ratio <= 1.22, f"Out-of-range line-height ratio {line_ratio:.4f} in {fname}"
+            line_ratio = (os2.sTypoAscender - os2.sTypoDescender) / float(upm)
+            assert 1.17 <= line_ratio <= 1.22, f"Out-of-range line-height ratio {line_ratio:.4f} in {fname}"
 
-        is_italic_file = "Italic" in fname
-        italic_angle = font["post"].italicAngle if "post" in font else 0.0
-        if is_italic_file:
-            assert (os2.fsSelection & 0x01) != 0 and italic_angle < 0, (
-                f"Italic metadata missing in {fname}: fsSelection=0x{os2.fsSelection:x} italicAngle={italic_angle}"
-            )
-        else:
-            assert (os2.fsSelection & 0x01) == 0 and italic_angle == 0, (
-                f"Unexpected italic flag in upright {fname}: fsSelection=0x{os2.fsSelection:x} italicAngle={italic_angle}"
-            )
+            is_italic_file = "Italic" in fname
+            italic_angle = font["post"].italicAngle if "post" in font else 0.0
+            if is_italic_file:
+                assert (os2.fsSelection & 0x01) != 0 and italic_angle < 0, (
+                    f"Italic metadata missing in {fname}: fsSelection=0x{os2.fsSelection:x} italicAngle={italic_angle}"
+                )
+            else:
+                assert (os2.fsSelection & 0x01) == 0 and italic_angle == 0, (
+                    f"Unexpected italic flag in upright {fname}: fsSelection=0x{os2.fsSelection:x} italicAngle={italic_angle}"
+                )
 
-        if fname == "CoreType-SFPro-Flex.ttf":
-            axes = {a.axisTag: (a.minValue, a.defaultValue, a.maxValue) for a in font["fvar"].axes}
-            assert "opsz" in axes, "CoreType-SFPro-Flex.ttf missing continuous opsz axis!"
-            opsz_min, _opsz_def, opsz_max = axes["opsz"]
-            assert opsz_min <= 17.0 and opsz_max >= 28.0 and opsz_max > opsz_min, (
-                f"Flex opsz range invalid: {axes['opsz']} (expected continuous 17..28)"
-            )
-            assert "wght" in axes and "wdth" in axes, f"Flex missing wght/wdth axes: {axes}"
-            gpos = font["GPOS"].table
-            fv = getattr(gpos, "FeatureVariations", None)
-            assert gpos.Version == 0x00010001 and fv is not None and fv.FeatureVariationCount >= 1, (
-                "CoreType-SFPro-Flex.ttf missing GPOS 1.1 FeatureVariations for dynamic opsz tracking!"
-            )
+            if fname in gms_weight_map:
+                assert "fvar" not in font, f"GMS static instance {fname} should not contain fvar!"
+                assert os2.usWeightClass == gms_weight_map[fname], (
+                    f"Unexpected usWeightClass in {fname}: {os2.usWeightClass} != {gms_weight_map[fname]}"
+                )
+
+            if fname == "CoreType-SFPro-Flex.ttf":
+                axes = {a.axisTag: (a.minValue, a.defaultValue, a.maxValue) for a in font["fvar"].axes}
+                assert "opsz" in axes, "CoreType-SFPro-Flex.ttf missing continuous opsz axis!"
+                opsz_min, _opsz_def, opsz_max = axes["opsz"]
+                assert opsz_min <= 17.0 and opsz_max >= 28.0 and opsz_max > opsz_min, (
+                    f"Flex opsz range invalid: {axes['opsz']} (expected continuous 17..28)"
+                )
+                assert "wght" in axes and "wdth" in axes, f"Flex missing wght/wdth axes: {axes}"
+                gpos = font["GPOS"].table
+                fv = getattr(gpos, "FeatureVariations", None)
+                assert gpos.Version == 0x00010001 and fv is not None and fv.FeatureVariationCount >= 1, (
+                    "CoreType-SFPro-Flex.ttf missing GPOS 1.1 FeatureVariations for dynamic opsz tracking!"
+                )
 
     print(
         f"[CoreType] Vertical metrics, continuous opsz & GPOS FeatureVariations audit PASSED "
@@ -645,7 +664,7 @@ def audit_built_fonts(out_dir: Path) -> None:
 
 
 def self_test_specs() -> int:
-    """Fast dependency-free audit of CoreType font metrics, optical specs, and Unicode filtering."""
+    """Fast dependency-free audit of CoreType font metrics, optical specs, RIBBI naming, and Unicode filtering."""
     total_h = ANDROID_ASCENT - ANDROID_DESCENT
     ratio = total_h / 2048.0
     ascent_share = ANDROID_ASCENT / float(total_h)
@@ -665,16 +684,23 @@ def self_test_specs() -> int:
     )
     assert "tnum" in UI_LAYOUT_FEATURES and "calt" in UI_LAYOUT_FEATURES and "kern" in UI_LAYOUT_FEATURES
 
+    # Verify RIBBI compliance on non-RIBBI static subfamilies
+    med_names = build_name_records("CoreType SF Pro Text", "Medium", "CoreTypeSFProText-Medium")
+    assert med_names[1] == "CoreType SF Pro Text Medium" and med_names[2] == "Regular"
+    assert med_names[16] == "CoreType SF Pro Text" and med_names[17] == "Medium"
+    reg_names = build_name_records("CoreType SF Pro Text", "Italic", "CoreTypeSFProText-Italic")
+    assert reg_names[1] == "CoreType SF Pro Text" and reg_names[2] == "Italic"
+
     # Verify Unicode preservation (Phonetic Extensions 'ʲᵈᵐ', Latin, digits) & PUA/Arabic exclusion
     for cp in (0x0041, 0x0030, 0x02B2, 0x1D48, 0x1D50):
         assert is_kept_unicode(cp), f"Expected U+{cp:04X} to be preserved"
-    for cp in (0xE000, 0xF8FF, 0x100000, 0x0627):
+    for cp in (0xE000, 0xF8FF, 0x100000, 0x0627, 0x0870):
         assert not is_kept_unicode(cp), f"Expected U+{cp:04X} to be excluded"
 
     print(
         f"[PASS] build_fonts.py audit OK: metrics={ANDROID_ASCENT}/{ANDROID_DESCENT} "
         f"(ratio={ratio:.4f}, ascent={ascent_share*100:.1f}%), Flex opsz=17..28 FeatureVariations(-46->-26), "
-        f"GMS-Bold opsz=24, tnum+calt+Unicode verified"
+        f"GMS-Bold opsz=24, RIBBI+tnum+calt+Unicode verified"
     )
     return 0
 
@@ -705,7 +731,15 @@ def main() -> int:
             if dmg_path is None:
                 dmg_path = tmp_dir / "SF-Pro.dmg"
                 print("[CoreType] Downloading official SF-Pro.dmg from Apple CDN ...")
-                run_cmd(["curl", "-fsSL", "-o", str(dmg_path), SF_PRO_DMG_URL])
+                run_cmd([
+                    "curl", "-fsSL",
+                    "--retry", "3",
+                    "--retry-delay", "5",
+                    "--connect-timeout", "30",
+                    "--max-time", "600",
+                    "-o", str(dmg_path),
+                    SF_PRO_DMG_URL,
+                ])
             fonts_dir = extract_sf_pro(dmg_path, tmp_dir / "extract")
 
         for spec in OPTICAL_SPECS:

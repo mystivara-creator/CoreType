@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# CoreType — Universal HyperOS 1–4 & Android 12–16 Installer (KernelSU-Umount-Safe, OTA-Aware)
+# CoreType — Universal HyperOS 1–4 & Android 12–17 Installer (KernelSU-Umount-Safe, OTA-Aware)
 
 # shellcheck disable=SC2034
 SKIPUNZIP=0
@@ -109,7 +109,7 @@ ct_ui_print "- Dynamic Weight Curve: $CT_CONTRAST_LABEL | Bias ${CT_WEIGHT_BIAS}
 ct_ui_print "- KernelSU-Umount-Safe Stock Slots (shared inode):"
 ct_ui_print "  Text    (opsz 17)    -> $CT_SLOT_TEXT"
 ct_ui_print "  Display (opsz 28)    -> $CT_SLOT_DISP"
-ct_ui_print "  Flex    (opsz 12-36) -> ${CT_SLOT_FLEX:-$CT_SLOT_TEXT}"
+ct_ui_print "  Flex    (opsz 17-28) -> ${CT_SLOT_FLEX:-$CT_SLOT_TEXT}"
 ct_ui_print "  Italic  (opsz 17)    -> $CT_SLOT_ITAL"
 ct_ui_print "  DispIt  (opsz 28)    -> $CT_SLOT_DITAL"
 

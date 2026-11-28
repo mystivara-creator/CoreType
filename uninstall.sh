@@ -4,7 +4,8 @@
 for _pf in /dev/.coretype/watchd.pid /data/adb/coretype/watcher.pid; do
     if [ -r "$_pf" ]; then
         _wpid=$(tr -cd '0-9' < "$_pf" 2>/dev/null)
-        if [ -n "$_wpid" ]; then
+        if [ -n "$_wpid" ] && [ -r "/proc/$_wpid/cmdline" ] \
+            && tr '\0' ' ' < "/proc/$_wpid/cmdline" 2>/dev/null | grep -qE 'coretype-watchd|service\.sh'; then
             kill -TERM "$_wpid" 2>/dev/null || true
         fi
     fi

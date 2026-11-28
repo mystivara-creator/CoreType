@@ -162,6 +162,11 @@ code {
     border-color: var(--sep) !important;
     box-shadow: 0 2px 10px var(--glass-shadow) !important;
   }
+  .tab-lens {
+    background: var(--accent-soft) !important;
+    border-color: var(--accent) !important;
+    box-shadow: none !important;
+  }
 }
 
 body.reduced-glass::before {
@@ -976,7 +981,8 @@ body.reduced-glass .tab-lens {
   }
   .interactive-glow,
   .ios-toast,
-  .ios-slider::before {
+  .ios-slider::before,
+  .tab-lens {
     transition: none;
   }
 }
