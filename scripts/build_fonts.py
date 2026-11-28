@@ -207,20 +207,17 @@ UI_LAYOUT_FEATURES = [
 
 def is_kept_unicode(cp: int) -> bool:
     """
-    Keep ALL real Unicode glyphs present in Apple SF-Pro.ttf (including Basic/Ext Latin A-E,
-    Phonetic Extensions U+1D00..1DFF for superscripts like 'ʲᵈᵐ', Greek, Cyrillic, Vietnamese,
-    Superscripts/Subscripts, Math, Currency, Punctuation, Arrows, Symbols) PLUS the iconic
-    Apple logo U+F8FF (''), while dropping:
-      - All other Private Use Area SF Symbols (U+E000..F8FE, U+F0000+)
-      - Arabic ranges so ROM-native MiSansArabicVF / NotoNaskhArabic handles Arabic cleanly
+    Preserve ALL Unicode scripts AND ALL Apple Symbols / PUA glyphs present in SF-Pro.ttf
+    (including Basic/Ext Latin A-E, Phonetic Extensions U+1D00..1DFF like 'ʲᵈᵐ', Greek,
+    Cyrillic, Vietnamese, Math, Currency, Punctuation, Arrows, the bitten Apple logo ''
+    U+F8FF, and full Apple SF Symbols in U+E000..F8FF & U+F0000+).
+    Android maps font files read-only via shared mmap page cache (demand-paged), so full
+    symbol preservation adds zero idle CPU/RAM overhead while preventing all symbol tofu boxes.
+
+    Excludes ONLY Arabic blocks so HyperOS/Android's native Arabic fonts (MiSansArabicVF /
+    NotoNaskhArabic) continue shaping Arabic text cleanly.
     """
-    # Preserve the iconic bitten Apple logo (, U+F8FF) natively from SF-Pro.ttf
-    if cp == 0xF8FF:
-        return True
-    # Drop all other Private Use Areas (Apple SF Symbols bloat)
-    if (0xE000 <= cp <= 0xF8FE) or cp >= 0xF0000:
-        return False
-    # Preserve BOM & Replacement chars; let ROM's native Arabic fonts handle Arabic blocks
+    # Let ROM's native Arabic fonts handle Arabic blocks cleanly
     if (0x0600 <= cp <= 0x06FF) or (0x0750 <= cp <= 0x077F) or (0x0870 <= cp <= 0x08FF):
         return False
     if (0xFB50 <= cp <= 0xFDFF) or (0xFE70 <= cp <= 0xFEFE):
@@ -229,7 +226,7 @@ def is_kept_unicode(cp: int) -> bool:
 
 
 def subset_font(font: TTFont) -> None:
-    """Strip Apple-only PUA glyphs & desktop-only OT sets while keeping 100% real UI scripts & features."""
+    """Retain 100% UI scripts & Apple Symbols/PUA while dropping desktop-only OT sets & Arabic fallback blocks."""
     cmap = font.getBestCmap() or {}
     keep_cps = [cp for cp in cmap.keys() if is_kept_unicode(cp)]
 
@@ -253,11 +250,15 @@ def _build_tracking_lookup(font: "TTFont", track_units: int, space_track: int):
     glyph_order = font.getGlyphOrder()
     glyph_id_map = {g: i for i, g in enumerate(glyph_order)}
 
-    # Build reverse map glyph -> primary codepoint to classify marks/space cleanly
+    # Build reverse map glyph -> primary codepoint and collect PUA/SF Symbol glyphs so icon
+    # glyphs retain 100% native Apple sidebearings and never bloat/overflow SinglePos subtables.
     glyph_to_cp = {}
+    pua_glyphs = set()
     for cp, gname in cmap.items():
         if gname not in glyph_to_cp:
             glyph_to_cp[gname] = cp
+        if (0xE000 <= cp <= 0xF8FF) or cp >= 0xF0000:
+            pua_glyphs.add(gname)
 
     # Collect GDEF mark glyphs (class 3) to guarantee we never track combining marks
     mark_glyphs = set()
@@ -275,7 +276,12 @@ def _build_tracking_lookup(font: "TTFont", track_units: int, space_track: int):
 
     adjustments = []
     for gname in glyph_order:
-        if gname == ".notdef" or gname in mark_glyphs:
+        if (
+            gname == ".notdef"
+            or gname in mark_glyphs
+            or gname in pua_glyphs
+            or gname.split(".")[0] in pua_glyphs
+        ):
             continue
         aw, _lsb = hmtx[gname]
         if aw <= 0:
@@ -285,12 +291,8 @@ def _build_tracking_lookup(font: "TTFont", track_units: int, space_track: int):
         cat = None
         if cp is not None:
             cat = unicodedata.category(chr(cp))
-            if cat in ("Mn", "Me", "Cf", "Cc"):
+            if cat in ("Mn", "Me", "Cf", "Cc", "Co"):
                 continue
-
-        if cp == 0xF8FF:
-            # Preserve Apple's exact native sidebearings for the bitten Apple logo ()
-            continue
 
         is_digit = (cp is not None and 0x0030 <= cp <= 0x0039) or gname.split(".")[0] in digit_prefixes
         if is_digit:
@@ -819,16 +821,16 @@ def self_test_specs() -> int:
     reg_names = build_name_records("CoreType SF Pro Text", "Italic", "CoreTypeSFProText-Italic")
     assert reg_names[1] == "CoreType SF Pro Text" and reg_names[2] == "Italic"
 
-    # Verify Unicode preservation (Phonetic Extensions 'ʲᵈᵐ', Apple logo '' U+F8FF, Latin, digits) & PUA/Arabic exclusion
-    for cp in (0x0041, 0x0030, 0x02B2, 0x1D48, 0x1D50, 0xF8FF):
+    # Verify full Unicode + Apple SF Symbols / PUA preservation (including 'ʲᵈᵐ', '' U+F8FF, SF Symbols) & Arabic fallback exclusion
+    for cp in (0x0041, 0x0030, 0x02B2, 0x1D48, 0x1D50, 0xE000, 0xF8FF, 0x100000):
         assert is_kept_unicode(cp), f"Expected U+{cp:04X} to be preserved"
-    for cp in (0xE000, 0xF8FE, 0x100000, 0x0627, 0x0870):
-        assert not is_kept_unicode(cp), f"Expected U+{cp:04X} to be excluded"
+    for cp in (0x0627, 0x0750, 0x0870, 0xFB50, 0xFE70):
+        assert not is_kept_unicode(cp), f"Expected Arabic U+{cp:04X} to defer to ROM Arabic fallback"
 
     print(
         f"[PASS] build_fonts.py audit OK: metrics={ANDROID_ASCENT}/{ANDROID_DESCENT} "
         f"(ratio={ratio:.4f}, ascent={ascent_share*100:.1f}%), 2D opsz x wght FeatureVariations across all 5 masters, "
-        f"GMS-Bold opsz=24, avar+RIBBI+tnum+calt+Unicode verified"
+        f"GMS-Bold opsz=24, full SF Symbols++avar+RIBBI+tnum+calt verified"
     )
     return 0
 
