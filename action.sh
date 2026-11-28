@@ -112,6 +112,38 @@ ct_export_diag() {
                     "$_xml" "$_has_ct" "$_has_opsz" "$_has_bad"
             fi
         done
+
+        printf '\n=== OVERRIDE & CONFLICT CHECK ===\n'
+        _theme_fonts=""
+        for _tf in /data/system/theme/fonts/* /data/system/theme_magic/fonts/*; do
+            [ -f "$_tf" ] || continue
+            _tbase="${_tf##*/}"
+            _theme_fonts="${_theme_fonts:+${_theme_fonts},}${_tbase}"
+        done
+        printf 'theme_font_override=%s\n' "${_theme_fonts:-none}"
+
+        _conflict_mods=""
+        for _mdir in /data/adb/modules/*; do
+            [ -d "$_mdir" ] || continue
+            _mname="${_mdir##*/}"
+            [ "$_mname" = "coretype" ] && continue
+            [ -f "$_mdir/disable" ] || [ -f "$_mdir/remove" ] && continue
+            if [ -d "$_mdir/system/fonts" ] || [ -d "$_mdir/system/product/fonts" ] \
+                || [ -f "$_mdir/system/etc/font_fallback.xml" ] || [ -f "$_mdir/system/etc/fonts.xml" ]; then
+                _conflict_mods="${_conflict_mods:+${_conflict_mods},}${_mname}"
+            fi
+        done
+        printf 'conflicting_font_modules=%s\n' "${_conflict_mods:-none}"
+
+        _root_env="unknown"
+        if [ -d /data/adb/ksu ]; then
+            _root_env="ksu"
+        elif [ -d /data/adb/ap ]; then
+            _root_env="apatch"
+        elif [ -d /data/adb/magisk ]; then
+            _root_env="magisk"
+        fi
+        printf 'root_env=%s\n' "$_root_env"
     } > "$_dtmp" 2>/dev/null || ! mv "$_dtmp" "$_out" 2>/dev/null; then
         rm -f "$_dtmp" 2>/dev/null || true
         printf 'Failed to write diagnostic report to %s\n' "$_out" >&2

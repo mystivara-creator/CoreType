@@ -518,7 +518,9 @@ if [ -n "$_cxx" ]; then
             && [ -s "$DIAG_OUT" ] \
             && grep -q 'daemon_mode=native-epoll' "$DIAG_OUT" \
             && grep -q 'watch_health=healthy' "$DIAG_OUT" \
-            && grep -q 'duplicate_mounts=' "$DIAG_OUT"; then
+            && grep -q 'duplicate_mounts=' "$DIAG_OUT" \
+            && grep -q 'theme_font_override=' "$DIAG_OUT" \
+            && grep -q 'conflicting_font_modules=' "$DIAG_OUT"; then
             pass "One-tap diagnostic export (action.sh --diag) generated clean read-only bundle"
         else
             fail "action.sh --diag failed or missing required sections"
