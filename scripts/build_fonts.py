@@ -209,12 +209,16 @@ def is_kept_unicode(cp: int) -> bool:
     """
     Keep ALL real Unicode glyphs present in Apple SF-Pro.ttf (including Basic/Ext Latin A-E,
     Phonetic Extensions U+1D00..1DFF for superscripts like 'ʲᵈᵐ', Greek, Cyrillic, Vietnamese,
-    Superscripts/Subscripts, Math, Currency, Punctuation, Arrows, Symbols), while dropping:
-      - Apple-only Private Use Area SF Symbols (U+E000..F8FF, U+F0000+)
-      - Arabic presentation ranges so ROM-native MiSansArabicVF / NotoNaskhArabic handles Arabic cleanly
+    Superscripts/Subscripts, Math, Currency, Punctuation, Arrows, Symbols) PLUS the iconic
+    Apple logo U+F8FF (''), while dropping:
+      - All other Private Use Area SF Symbols (U+E000..F8FE, U+F0000+)
+      - Arabic ranges so ROM-native MiSansArabicVF / NotoNaskhArabic handles Arabic cleanly
     """
-    # Drop Private Use Areas (Apple SF Symbols)
-    if (0xE000 <= cp <= 0xF8FF) or cp >= 0xF0000:
+    # Preserve the iconic bitten Apple logo (, U+F8FF) natively from SF-Pro.ttf
+    if cp == 0xF8FF:
+        return True
+    # Drop all other Private Use Areas (Apple SF Symbols bloat)
+    if (0xE000 <= cp <= 0xF8FE) or cp >= 0xF0000:
         return False
     # Preserve BOM & Replacement chars; let ROM's native Arabic fonts handle Arabic blocks
     if (0x0600 <= cp <= 0x06FF) or (0x0750 <= cp <= 0x077F) or (0x0870 <= cp <= 0x08FF):
@@ -283,6 +287,10 @@ def _build_tracking_lookup(font: "TTFont", track_units: int, space_track: int):
             cat = unicodedata.category(chr(cp))
             if cat in ("Mn", "Me", "Cf", "Cc"):
                 continue
+
+        if cp == 0xF8FF:
+            # Preserve Apple's exact native sidebearings for the bitten Apple logo ()
+            continue
 
         is_digit = (cp is not None and 0x0030 <= cp <= 0x0039) or gname.split(".")[0] in digit_prefixes
         if is_digit:
@@ -811,10 +819,10 @@ def self_test_specs() -> int:
     reg_names = build_name_records("CoreType SF Pro Text", "Italic", "CoreTypeSFProText-Italic")
     assert reg_names[1] == "CoreType SF Pro Text" and reg_names[2] == "Italic"
 
-    # Verify Unicode preservation (Phonetic Extensions 'ʲᵈᵐ', Latin, digits) & PUA/Arabic exclusion
-    for cp in (0x0041, 0x0030, 0x02B2, 0x1D48, 0x1D50):
+    # Verify Unicode preservation (Phonetic Extensions 'ʲᵈᵐ', Apple logo '' U+F8FF, Latin, digits) & PUA/Arabic exclusion
+    for cp in (0x0041, 0x0030, 0x02B2, 0x1D48, 0x1D50, 0xF8FF):
         assert is_kept_unicode(cp), f"Expected U+{cp:04X} to be preserved"
-    for cp in (0xE000, 0xF8FF, 0x100000, 0x0627, 0x0870):
+    for cp in (0xE000, 0xF8FE, 0x100000, 0x0627, 0x0870):
         assert not is_kept_unicode(cp), f"Expected U+{cp:04X} to be excluded"
 
     print(

@@ -97,7 +97,16 @@ jobs:
           assert dsp_reg < dsp_hvy < 0 and dsp_reg < dsp_thn < 0, f"Display wght FeatureVariations did not adapt Thin/Heavy ({dsp_thn} / {dsp_reg} / {dsp_hvy})!"
           s_jdm = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Text.ttf", "Yanz 25 \u02b2\u1d48\u1d50"], text=True))
           assert all(g["g"] != ".notdef" for g in s_jdm), f"Missing superscript glyph in Phonetic Extensions: {s_jdm}"
-          print(f"[PASS] HarfBuzz 2D GPOS FeatureVariations verified: Flex opsz(17:{dx_text} -> 21:{dx_semi} -> 28:{dx_disp}), Text wght({txt_reg}->{txt_bld}->{txt_hvy}), Display wght(Thin:{dsp_thn}, Reg:{dsp_reg}, Heavy:{dsp_hvy}), pure digits & calt colon ({c_text}->{c_clock})")
+          for f_logo in [
+              "fonts/CoreType-SFPro-Text.ttf",
+              "fonts/CoreType-SFPro-Display.ttf",
+              "fonts/CoreType-SFPro-Flex.ttf",
+              "fonts/CoreType-SFPro-GMS-Medium.ttf",
+              "fonts/CoreType-SFPro-GMS-Bold.ttf",
+          ]:
+              s_apple = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", f_logo, "\uf8ff"], text=True))
+              assert len(s_apple) == 1 and s_apple[0]["g"] != ".notdef" and s_apple[0]["ax"] > 0 and s_apple[0]["dx"] == 0, f"Missing/corrupt Apple logo U+F8FF in {f_logo}: {s_apple}"
+          print(f"[PASS] HarfBuzz 2D GPOS FeatureVariations verified: Flex opsz(17:{dx_text} -> 21:{dx_semi} -> 28:{dx_disp}), Text wght({txt_reg}->{txt_bld}->{txt_hvy}), Display wght(Thin:{dsp_thn}, Reg:{dsp_reg}, Heavy:{dsp_hvy}), Apple logo U+F8FF, pure digits & calt colon ({c_text}->{c_clock})")
           PY
 
       - name: Package CoreType Lite (SF Pro Only)
@@ -187,7 +196,7 @@ jobs:
           - **2D (\`opsz\` × \`wght\`) Apple CoreText-Parity GPOS \`FeatureVariations\`:** Post-\`avar\` weight- and optical-size-adaptive tracking across **all 5 variable masters** — \`SF Pro Text\` relaxes smoothly as weight increases (\`−46 → −32 → −20 UPM\`, bringing HyperOS MiSans Weight Slider to life), \`SF Pro Display\` adapts airy UltraLight/Thin clocks (\`−14 UPM\`), crisp titles (\`−26 UPM\`), and Heavy/Black (\`−16 UPM\`), and \`SF Pro Flex\` graduates \`opsz 17 → 18 → 21 → 24 → 28\` across Apple's exact 20pt/24pt thresholds (\`−46 → −34 → −24 → −16 UPM\`) with precision currency/bracket/quote spacing and RIBBI-compliant GMS static weights.
           - **iOS 27 Liquid Glass WebUI (100% Weight-Curve Parity & Atomic Config):** Exact 1:1 live specimen preview matching \`lib/font_xml.sh\`, serialized atomic multi-key preset writes, reliable Android WebView tap/drag dock handling, \`Pending Reboot\` state indicator, ARIA accessibility roles, and auto-refreshing Engine telemetry.
           - **Hardened C++20 Event-Driven Daemon (\`coretype-watchd\`, ARM64):** Inode-aware \`WatchManager\` (\`IN_MOVE_SELF\` + atomic \`IN_MOVED_TO | IN_ISDIR\` + \`IN_Q_OVERFLOW\` recovery), 4 MB \`/proc/self/mountinfo\` cap for Android 16/17 mount propagation, instant \`epoll\` FBE shutdown, PID \`/proc/<pid>/cmdline\` safety, and Meta \`app_ras_blobs\` visibility in \`action.sh --diag\`.
-          - **4:1 Vertical Metrics Parity, Dynamic Weight Curve & Apple iOS 26.4 Emoji:** \`1968 / −492\` CJK-aligned metrics, \`tnum\` + \`calt\` (\`09:41\`), stock \`MiClock*.otf\` preservation, MiSans Font Weight slider support, and KernelSU-umount-safe Apple iOS 26.4 Color Emoji.
+          - **4:1 Vertical Metrics Parity, Native Apple Logo (\`\` \`U+F8FF\`), Dynamic Weight Curve & Apple iOS 26.4 Emoji:** \`1968 / −492\` CJK-aligned metrics, native vector \`\` (\`U+F8FF\`) glyph preserved across all SF Pro masters (zero tofu boxes!), \`tnum\` + \`calt\` (\`09:41\`), stock \`MiClock*.otf\` preservation, MiSans Font Weight slider support, and KernelSU-umount-safe Apple iOS 26.4 Color Emoji.
 
           ---
 
