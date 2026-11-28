@@ -23,22 +23,22 @@ DEFAULT_EMOJI_ZIP_URL = (
 
 def verify_android_emoji(ttf_path: Path) -> None:
     """Confirm the emoji TTF contains valid Android Skia/FreeType CBDT+CBLC bitmap tables."""
-    font = TTFont(str(ttf_path))
-    required = {"CBDT", "CBLC", "cmap", "head", "hhea", "hmtx", "maxp", "OS/2"}
-    missing = required - set(font.keys())
-    if missing:
-        raise RuntimeError(f"Emoji font missing required Android tables: {sorted(missing)}")
+    with TTFont(str(ttf_path)) as font:
+        required = {"CBDT", "CBLC", "cmap", "head", "hhea", "hmtx", "maxp", "OS/2"}
+        missing = required - set(font.keys())
+        if missing:
+            raise RuntimeError(f"Emoji font missing required Android tables: {sorted(missing)}")
 
-    strikes = [(s.bitmapSizeTable.ppemX, s.bitmapSizeTable.ppemY) for s in font["CBLC"].strikes]
-    glyphs = len(font.getGlyphOrder())
-    size_mb = ttf_path.stat().st_size / (1024.0 * 1024.0)
-    if glyphs < 3000 or not strikes:
-        raise RuntimeError(f"Invalid emoji font: glyphs={glyphs}, strikes={strikes}")
+        strikes = [(s.bitmapSizeTable.ppemX, s.bitmapSizeTable.ppemY) for s in font["CBLC"].strikes]
+        glyphs = len(font.getGlyphOrder())
+        size_mb = ttf_path.stat().st_size / (1024.0 * 1024.0)
+        if glyphs < 3000 or not strikes:
+            raise RuntimeError(f"Invalid emoji font: glyphs={glyphs}, strikes={strikes}")
 
-    print(
-        f"[CoreType] Verified Apple Color Emoji ({size_mb:.1f} MB) | "
-        f"glyphs={glyphs} | CBDT/CBLC strikes={strikes}"
-    )
+        print(
+            f"[CoreType] Verified Apple Color Emoji ({size_mb:.1f} MB) | "
+            f"glyphs={glyphs} | CBDT/CBLC strikes={strikes}"
+        )
 
 
 def main() -> int:
@@ -50,9 +50,17 @@ def main() -> int:
     tmp_dir = Path(tempfile.mkdtemp(prefix="coretype_emoji_"))
     try:
         zip_path = tmp_dir / "emoji.zip"
-        print(f"[CoreType] Downloading Android CBDT/CBLC Apple Color Emoji ...")
+        print("[CoreType] Downloading Android CBDT/CBLC Apple Color Emoji ...")
         res = subprocess.run(
-            ["curl", "-fsSL", "-o", str(zip_path), args.url],
+            [
+                "curl", "-fsSL",
+                "--retry", "3",
+                "--retry-delay", "5",
+                "--connect-timeout", "30",
+                "--max-time", "600",
+                "-o", str(zip_path),
+                args.url,
+            ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -61,7 +69,10 @@ def main() -> int:
             raise RuntimeError(f"Download failed: {res.stderr}")
 
         with zipfile.ZipFile(zip_path, "r") as zf:
-            candidates = [n for n in zf.namelist() if n.endswith("NotoColorEmoji.ttf")]
+            candidates = [
+                n for n in zf.namelist()
+                if not n.startswith("__MACOSX/") and Path(n).name == "NotoColorEmoji.ttf"
+            ]
             if not candidates:
                 raise FileNotFoundError("NotoColorEmoji.ttf not found inside emoji archive")
             args.out.parent.mkdir(parents=True, exist_ok=True)

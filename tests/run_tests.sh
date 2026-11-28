@@ -1,5 +1,5 @@
 #!/bin/sh
-# CoreType — Automated POSIX Test Suite (HyperOS 1–4, AOSP 12–16, MiSans Slider & Apple iOS Emoji)
+# CoreType — Automated POSIX Test Suite (HyperOS 1–4, Android 12–17, MiSans Slider & Apple iOS Emoji)
 
 set -eu
 
@@ -144,7 +144,9 @@ assert_grep 'CoreType Dual-Optical' "$TMP_DIR/font_fallback.xml" "Contains CoreT
 assert_grep 'weight="400" style="normal">Roboto-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Body 400 routed to Text slot"
 assert_not_grep 'style="italic">Roboto-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Omitted fake upright italic on HyperOS 3/4 so Minikin synthesizes true oblique italics"
 assert_grep 'weight="400" style="normal">RobotoFlex-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "roboto-flex routed to dedicated continuous-opsz Flex slot"
-assert_grep 'tag="opsz" stylevalue="17"' "$TMP_DIR/font_fallback.xml" "roboto-flex declares continuous opsz=17 for Text weights"
+assert_grep 'tag="opsz" stylevalue="17"' "$TMP_DIR/font_fallback.xml" "roboto-flex declares continuous opsz=17 for Body weights"
+assert_grep 'tag="opsz" stylevalue="21"' "$TMP_DIR/font_fallback.xml" "roboto-flex declares graduated opsz=21 for Semi-Display (600)"
+assert_grep 'tag="opsz" stylevalue="24"' "$TMP_DIR/font_fallback.xml" "roboto-flex declares graduated opsz=24 for Title2 (700)"
 assert_grep 'tag="opsz" stylevalue="28"' "$TMP_DIR/font_fallback.xml" "roboto-flex declares continuous opsz=28 for Display weights"
 assert_grep 'weight="600" style="normal">RobotoStatic-Regular\.ttf' "$TMP_DIR/font_fallback.xml" "Header 600 routed to Display slot"
 assert_not_grep 'supportedAxes="wght,ital"' "$TMP_DIR/font_fallback.xml" "Eliminated duplicate Roboto-Regular fallback overwrite"
@@ -434,7 +436,7 @@ if [ -n "$_cxx" ]; then
             && grep -q '^watch_health=healthy$' "$WD_RUN/telemetry.prop" \
             && grep -q '^watch_recoveries=0$' "$WD_RUN/telemetry.prop" \
             && grep -q '^sync_count=1$' "$WD_RUN/telemetry.prop" \
-            && grep -q '^active_text_tracking_upm=-46$' "$WD_RUN/telemetry.prop" \
+            && grep -q '^active_text_tracking_upm=-44$' "$WD_RUN/telemetry.prop" \
             && grep -q '^active_display_tracking_upm=-26$' "$WD_RUN/telemetry.prop"; then
             pass "coretype-watchd booted in epoll mode & emitted valid telemetry.prop (watch_health=healthy)"
         else
@@ -465,6 +467,32 @@ if [ -n "$_cxx" ]; then
             fail "Self-healing inotify did not recover (watch_health=${_wh:-unknown}, watch_recoveries=${_wr:-0})"
         fi
 
+        # Verify IN_MOVE_SELF + atomic directory rename (IN_MOVED_TO | IN_ISDIR) recovery
+        _wr_before="$_wr"
+        mv "$WD_GMS/fonts/opentype" "$WD_GMS/fonts/opentype.moved"
+        sleep 0.3 2>/dev/null || sleep 1
+        mkdir -p "$WD_GMS/fonts/opentype.staging"
+        printf 'mockttf2' > "$WD_GMS/fonts/opentype.staging/Google_Sans_Text-500-100_0-0_0.ttf"
+        mv "$WD_GMS/fonts/opentype.staging" "$WD_GMS/fonts/opentype"
+
+        _mtry=0
+        _mrecovered=0
+        while [ "$_mtry" -lt 40 ]; do
+            _wh=$(awk -F= '$1=="watch_health"{print $2;exit}' "$WD_RUN/telemetry.prop" 2>/dev/null || true)
+            _wr=$(awk -F= '$1=="watch_recoveries"{print $2;exit}' "$WD_RUN/telemetry.prop" 2>/dev/null || echo 0)
+            if [ "$_wh" = "healthy" ] && [ "${_wr:-0}" -gt "${_wr_before:-0}" ]; then
+                _mrecovered=1
+                break
+            fi
+            sleep 0.1 2>/dev/null || sleep 1
+            _mtry=$((_mtry + 1))
+        done
+        if [ "$_mrecovered" = "1" ]; then
+            pass "Inode-aware inotify recovered after IN_MOVE_SELF + atomic dir rename (watch_recoveries ${_wr_before} -> ${_wr})"
+        else
+            fail "Inode-aware inotify did not recover after IN_MOVE_SELF (watch_health=${_wh:-unknown}, recoveries=${_wr:-0})"
+        fi
+
         # Verify SIGUSR1 triggers instant on-demand sync (< 5 ms)
         _sc_before=$(awk -F= '$1=="sync_count"{print $2;exit}' "$WD_RUN/telemetry.prop" 2>/dev/null || echo 0)
         kill -USR1 "$_wpid" 2>/dev/null || true
@@ -490,7 +518,9 @@ if [ -n "$_cxx" ]; then
             && [ -s "$DIAG_OUT" ] \
             && grep -q 'daemon_mode=native-epoll' "$DIAG_OUT" \
             && grep -q 'watch_health=healthy' "$DIAG_OUT" \
-            && grep -q 'duplicate_mounts=' "$DIAG_OUT"; then
+            && grep -q 'duplicate_mounts=' "$DIAG_OUT" \
+            && grep -q 'theme_font_override=' "$DIAG_OUT" \
+            && grep -q 'conflicting_font_modules=' "$DIAG_OUT"; then
             pass "One-tap diagnostic export (action.sh --diag) generated clean read-only bundle"
         else
             fail "action.sh --diag failed or missing required sections"
@@ -504,12 +534,137 @@ if [ -n "$_cxx" ]; then
         else
             fail "SIGTERM did not clean up runtime directory ($WD_RUN)"
         fi
+
+        # Verify --version matches module.prop and --oneshot does not leave a dead watchd.pid
+        _wd_ver=$("$WATCHD_TEST_BIN" --version 2>/dev/null || true)
+        _prop_ver=$(awk -F= '$1=="version"{sub(/^v/,"",$2);print $2;exit}' "$REPO_ROOT/module.prop" 2>/dev/null || true)
+        WD_ONE_RUN="$TMP_DIR/wd_oneshot_run"
+        if [ "$_wd_ver" = "coretype-watchd ${_prop_ver}" ] \
+            && [ "$_prop_ver" = "1.2.2" ] \
+            && "$WATCHD_TEST_BIN" --moddir "$WD_MOD" --datadir "$WD_DATA" --rundir "$WD_ONE_RUN" \
+                --gms-files "$WD_GMS" --data-fonts "$WD_DF" --oneshot \
+            && [ -s "$WD_ONE_RUN/telemetry.prop" ] \
+            && [ ! -e "$WD_ONE_RUN/watchd.pid" ]; then
+            pass "coretype-watchd --version (${_prop_ver}) matches module.prop & --oneshot clean exit"
+        else
+            fail "coretype-watchd --version or --oneshot check failed (ver=$_wd_ver prop=$_prop_ver)"
+        fi
     fi
 else
     printf '  [SKIP] no host C++20 compiler installed\n'
 fi
 
-printf '=== Test 7: Static Analysis (sh -n, ShellCheck, JS, Python & Font Metrics Audit) ===\n'
+printf '=== Test 7: Audit Hardening Regression Tests (XML Edge Cases, PID Safety, JS/Shell Parity) ===\n'
+# 7a. Single-line unnamed <family> & zh-Hans variant attribute preservation
+cat > "$TMP_DIR/edge_xml.xml" <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<familyset>
+    <family name="sans-serif"><font weight="400" style="normal">MiSansVF_Overlay.ttf</font></family>
+    <family><font weight="400" style="normal">MiSansLatinVF.ttf</font></family>
+    <family lang="zh-Hans" variant="compact">
+        <font weight="400" style="normal">MiSansVF.ttf</font>
+    </family>
+</familyset>
+EOF
+ct_resolve_stock_slots "$HOS3_FONTS"
+ct_resolve_cjk_fallback "$HOS3_FONTS" "$HOS3_PROD"
+CT_MISANS_SLIDER_ACTIVE="1"
+if ct_patch_font_xml "$TMP_DIR/edge_xml.xml" "$TMP_DIR/edge_out.xml" "dynamic_optical" "$HOS3_FONTS" \
+    && ! grep -q 'MiSansLatinVF\.ttf' "$TMP_DIR/edge_out.xml" \
+    && grep -q '<family lang="zh-Hans" variant="compact">' "$TMP_DIR/edge_out.xml" \
+    && grep -q 'MiSansTCVF\.ttf' "$TMP_DIR/edge_out.xml"; then
+    pass "Single-line unnamed family replaced & zh-Hans variant=\"compact\" attribute preserved"
+else
+    fail "XML edge-case patching failed"
+fi
+
+# 7b. Corrupt optional GMS static master is rejected by ct_verify_all_masters
+BAD_GMS_DIR="$TMP_DIR/bad_gms_fonts"
+mkdir -p "$BAD_GMS_DIR"
+for _mf in CoreType-SFPro-Text.ttf CoreType-SFPro-Text-Italic.ttf CoreType-SFPro-Display.ttf CoreType-SFPro-Display-Italic.ttf; do
+    { printf '\000\001\000\000'; dd if=/dev/zero bs=1024 count=110 2>/dev/null; } > "$BAD_GMS_DIR/$_mf"
+done
+printf 'corrupt' > "$BAD_GMS_DIR/CoreType-SFPro-GMS-Bold.ttf"
+if ! ct_verify_all_masters "$BAD_GMS_DIR" && [ "$CT_FAILED_MASTER" = "CoreType-SFPro-GMS-Bold.ttf" ]; then
+    pass "ct_verify_all_masters catches corrupt optional GMS static font (CoreType-SFPro-GMS-Bold.ttf)"
+else
+    fail "ct_verify_all_masters missed corrupt CoreType-SFPro-GMS-Bold.ttf"
+fi
+
+# 7c. action.sh --diag exits non-zero on unwritable target & does not kill unrelated PID in watchd.pid
+if ! CT_RUN_DIR="$TMP_DIR/no_run" CT_DATA_DIR="$TMP_DIR/no_data" \
+    sh "$REPO_ROOT/action.sh" --diag "/proc/nonexistent_coretype_diag/out.txt" >/dev/null 2>&1; then
+    pass "action.sh --diag returns non-zero on unwritable output path"
+else
+    fail "action.sh --diag falsely succeeded on unwritable output path"
+fi
+
+SAFE_RUN="$TMP_DIR/safe_pid_run"
+SAFE_DATA="$TMP_DIR/safe_pid_data"
+mkdir -p "$SAFE_RUN" "$SAFE_DATA"
+printf 'gms_fonts_enabled=0\nemoji_enabled=0\n' > "$SAFE_DATA/config.conf"
+sleep 10 &
+_decoy_pid=$!
+printf '%s\n' "$_decoy_pid" > "$SAFE_RUN/watchd.pid"
+CT_RUN_DIR="$SAFE_RUN" CT_DATA_DIR="$SAFE_DATA" sh "$REPO_ROOT/action.sh" >/dev/null 2>&1 || true
+if kill -0 "$_decoy_pid" 2>/dev/null; then
+    pass "action.sh verified /proc/<pid>/cmdline and did NOT signal unrelated PID"
+else
+    fail "action.sh killed unrelated decoy PID via stale watchd.pid!"
+fi
+kill "$_decoy_pid" 2>/dev/null || true
+wait "$_decoy_pid" 2>/dev/null || true
+
+# 7d. Cross-language Weight Curve Parity (lib/font_xml.sh vs webroot/app.js) + Atomic Multi-Key Config Writer
+if command -v node >/dev/null 2>&1; then
+    _parity_ok=1
+    for _rc in hyperos_mipro aosp_linear; do
+        for _cm in soft balanced apple_native; do
+            for _wb in -60 -20 0 15 30 80; do
+                CT_ROM_CURVE="$_rc"
+                ct_load_weight_curve "$_wb" "$_cm"
+                _sh_row=""
+                for _sl in 100 200 300 350 400 500 600 700 800 900 950; do
+                    _sh_row="${_sh_row}$(ct_calc_wght "$_sl"),"
+                done
+                _js_row=$(node -e '
+                    const app = require(process.argv[1]);
+                    const slots = [100,200,300,350,400,500,600,700,800,900,950];
+                    process.stdout.write(slots.map(s => app.calcWght(s, process.argv[2], Number(process.argv[3]), process.argv[4])).join(",") + ",");
+                ' "$REPO_ROOT/webroot/app.js" "$_rc" "$_wb" "$_cm")
+                if [ "$_sh_row" != "$_js_row" ]; then
+                    _parity_ok=0
+                    fail "Curve mismatch ($_rc/$_cm/$_wb): sh=$_sh_row js=$_js_row"
+                    break 3
+                fi
+            done
+        done
+    done
+    if [ "$_parity_ok" = "1" ]; then
+        pass "100% Weight Curve parity between lib/font_xml.sh and webroot/app.js (36 combinations x 11 slots)"
+    fi
+
+    # Verify buildWriteConfCommand atomic multi-key write & injection rejection
+    CONF_TEST_FILE="$TMP_DIR/webui_conf_test/config.conf"
+    mkdir -p "$(dirname "$CONF_TEST_FILE")"
+    printf 'profile=dynamic_optical\nweight_bias=0\n' > "$CONF_TEST_FILE"
+    _wcmd=$(node -e '
+        const app = require(process.argv[1]);
+        const bad = app.buildWriteConfCommand({ weight_bias: "10; rm -rf /" }, process.argv[2]);
+        if (bad !== null) process.exit(2);
+        process.stdout.write(app.buildWriteConfCommand({ weight_bias: "30", contrast_mode: "apple_native" }, process.argv[2]));
+    ' "$REPO_ROOT/webroot/app.js" "$CONF_TEST_FILE")
+    if [ -n "$_wcmd" ] && sh -c "$_wcmd" \
+        && grep -q '^profile=dynamic_optical$' "$CONF_TEST_FILE" \
+        && grep -q '^weight_bias=30$' "$CONF_TEST_FILE" \
+        && grep -q '^contrast_mode=apple_native$' "$CONF_TEST_FILE"; then
+        pass "WebUI buildWriteConfCommand updated multiple keys atomically & rejected shell injection"
+    else
+        fail "WebUI buildWriteConfCommand test failed"
+    fi
+fi
+
+printf '=== Test 8: Static Analysis (sh -n, ShellCheck, JS, Python & Font Metrics Audit) ===\n'
 _sh_ok=1
 for _shf in \
     "$REPO_ROOT/customize.sh" \

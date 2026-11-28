@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# CoreType — Universal HyperOS 1–4 & Android 12–16 Installer (KernelSU-Umount-Safe, OTA-Aware)
+# CoreType — Universal HyperOS 1–4 & Android 12–17 Installer (KernelSU-Umount-Safe, OTA-Aware)
 
 # shellcheck disable=SC2034
 SKIPUNZIP=0
@@ -25,7 +25,7 @@ ct_ui_print() {
 
 ct_ui_print " "
 ct_ui_print "============================================="
-ct_ui_print "  CoreType — CoreText-Parity Engine v1.2.1"
+ct_ui_print "  CoreType — CoreText-Parity Engine v1.2.2"
 ct_ui_print "  by Mystivara | HyperOS 1–4 (Android 12–17)"
 ct_ui_print "============================================="
 
@@ -55,7 +55,7 @@ fi
 if [ "$_ct_is_hyperos" != "1" ] \
     && [ ! -r /system_ext/etc/hyper_font_fallback.xml ] \
     && [ ! -e /product/fonts/MiSansVF.ttf ]; then
-    abort "! Unsupported ROM detected. CoreType v1.2.1 is exclusively engineered for Xiaomi HyperOS (HyperOS 1–4 / Android 12–17)."
+    abort "! Unsupported ROM detected. CoreType v1.2.2 is exclusively engineered for Xiaomi HyperOS (HyperOS 1–4 / Android 12–17)."
 fi
 ct_ui_print "- Platform: ARM64 | HyperOS ${_ct_hos_name:-${_ct_miui_ver:-detected}} (Android ${_ct_android_rel})"
 
@@ -109,7 +109,7 @@ ct_ui_print "- Dynamic Weight Curve: $CT_CONTRAST_LABEL | Bias ${CT_WEIGHT_BIAS}
 ct_ui_print "- KernelSU-Umount-Safe Stock Slots (shared inode):"
 ct_ui_print "  Text    (opsz 17)    -> $CT_SLOT_TEXT"
 ct_ui_print "  Display (opsz 28)    -> $CT_SLOT_DISP"
-ct_ui_print "  Flex    (opsz 12-36) -> ${CT_SLOT_FLEX:-$CT_SLOT_TEXT}"
+ct_ui_print "  Flex    (opsz 17-28) -> ${CT_SLOT_FLEX:-$CT_SLOT_TEXT}"
 ct_ui_print "  Italic  (opsz 17)    -> $CT_SLOT_ITAL"
 ct_ui_print "  DispIt  (opsz 28)    -> $CT_SLOT_DITAL"
 
@@ -181,10 +181,10 @@ ct_state_write_all \
     "emoji_available=$CT_EMOJI_AVAILABLE" \
     "emoji_active=$CT_EMOJI_ACTIVE" \
     "ota_status=synced" \
-    "optical_engine=coretext_parity_continuous_opsz_epoll" \
+    "optical_engine=coretext_parity_2d_fv_epoll" \
     "bootloop_guard=armed"
 
-ct_log "Installed CoreType v1.2.1 (profile=$CT_PROFILE curve=${CT_ROM_CURVE:-hyperos_mipro}/bias=$CT_WEIGHT_BIAS/$CT_CONTRAST_MODE xmls=$CT_PATCHED_COUNT misans=$CT_MISANS_SLIDER_ACTIVE gms_fonts=$GMS_FONTS_ENABLED emoji=$CT_EMOJI_ACTIVE/$CT_EMOJI_AVAILABLE)"
+ct_log "Installed CoreType v1.2.2 (profile=$CT_PROFILE curve=${CT_ROM_CURVE:-hyperos_mipro}/bias=$CT_WEIGHT_BIAS/$CT_CONTRAST_MODE xmls=$CT_PATCHED_COUNT misans=$CT_MISANS_SLIDER_ACTIVE gms_fonts=$GMS_FONTS_ENABLED emoji=$CT_EMOJI_ACTIVE/$CT_EMOJI_AVAILABLE)"
 
 ct_ui_print "- Self-Healing Bootloop Guard: ARMED"
 ct_ui_print "- OTA Auto-Resync: ENABLED"

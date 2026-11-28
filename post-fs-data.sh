@@ -98,6 +98,7 @@ else
     # Verify mapped stock slots exist before mount; repair from masters if missing
     ct_load_slots
     _slot_missing=0
+    [ -s "$CT_DATA_DIR/slots.conf" ] || _slot_missing=1
     for _req in "$CT_SLOT_TEXT" "$CT_SLOT_DISP" "$CT_SLOT_FLEX" "$CT_SLOT_ITAL" "$CT_SLOT_DITAL"; do
         if [ -z "$_req" ] || [ ! -s "$MODDIR/system/fonts/$_req" ]; then
             _slot_missing=1
@@ -106,6 +107,7 @@ else
     if [ "$_slot_missing" = "1" ]; then
         ct_sync_stock_slots "$MODDIR" "/system/fonts" "/product/fonts"
         ct_sync_emoji_slots "$MODDIR" "$WANT_EMOJI" "/system/fonts"
+        ct_conf_set "applied_emoji" "$WANT_EMOJI"
         ct_log "Self-repaired missing stock font slot links from local masters"
     elif [ "$WANT_EMOJI" != "$APPLIED_EMOJI" ]; then
         ct_sync_emoji_slots "$MODDIR" "$WANT_EMOJI" "/system/fonts"

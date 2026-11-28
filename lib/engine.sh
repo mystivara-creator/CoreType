@@ -2,12 +2,12 @@
 # shellcheck disable=SC2034
 # CoreType — Unified Slot-Sync, Universal HyperOS MiSans Slider & OTA-Safe XML Engine
 # Shared by customize.sh (install) and post-fs-data.sh (profile switch & OTA auto-resync).
-# Compatible with HyperOS 1 / 2 / 3 / 4 and AOSP 12–16.
+# Compatible with HyperOS 1 / 2 / 3 / 4 and Android 12–17.
 
 ct_verify_ttf() {
     _f="$1"
     [ -f "$_f" ] || return 1
-    _sz=$(wc -c < "$_f" 2>/dev/null || echo 0)
+    _sz=$(ct_file_size "$_f")
     [ "$_sz" -gt 102400 ] || return 1
     if command -v od >/dev/null 2>&1; then
         _magic=$(od -An -tx1 -N4 "$_f" 2>/dev/null | tr -d ' \n\r')
@@ -29,11 +29,16 @@ ct_verify_all_masters() {
             return 1
         fi
     done
-    if [ -f "$_src_dir/CoreType-SFPro-Flex.ttf" ] && ! ct_verify_ttf "$_src_dir/CoreType-SFPro-Flex.ttf"; then
-        # shellcheck disable=SC2034
-        CT_FAILED_MASTER="CoreType-SFPro-Flex.ttf"
-        return 1
-    fi
+    for _opt in \
+        CoreType-SFPro-Flex.ttf \
+        CoreType-SFPro-GMS-Medium.ttf \
+        CoreType-SFPro-GMS-Bold.ttf; do
+        if [ -f "$_src_dir/$_opt" ] && ! ct_verify_ttf "$_src_dir/$_opt"; then
+            # shellcheck disable=SC2034
+            CT_FAILED_MASTER="$_opt"
+            return 1
+        fi
+    done
     return 0
 }
 
@@ -86,7 +91,7 @@ ct_sync_stock_slots() {
     CT_MISANS_SLIDER_ACTIVE="0"
 
     # Clean stale font files before re-syncing (prevents leftover files after OTA slot change)
-    rm -rf "$_moddir/system/fonts" "$_moddir/system/product/fonts" 2>/dev/null || true
+    rm -rf "$_moddir/system/fonts" "$_moddir/system/product/fonts" "$_moddir/system/system_ext/fonts" 2>/dev/null || true
     mkdir -p "$_moddir/system/fonts"
 
     ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text.ttf" "$_moddir/system/fonts/$CT_SLOT_TEXT"
@@ -112,27 +117,33 @@ ct_sync_stock_slots() {
         ct_sync_font_file "$_src_fonts/CoreType-SFPro-Display-Italic.ttf" "$_moddir/system/fonts/$CT_SLOT_DITAL"
     fi
 
-    # HyperOS Latin font slots (HyperOS 1/2/3/4)
-    for _extra_font in MiSansVF_Overlay.ttf MiSansLatinVF.ttf; do
+    # HyperOS Latin font slots across /system/fonts, /product/fonts, and /system_ext/fonts
+    for _extra_font in MiSansVF_Overlay.ttf MiSansLatinVF.ttf MiSansGlobalVF.ttf; do
         if [ -e "$_sys_fdir/$_extra_font" ]; then
             ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text.ttf" "$_moddir/system/fonts/$_extra_font"
         fi
+        if [ -e "$_prod_fdir/$_extra_font" ] || [ -e "/system$_prod_fdir/$_extra_font" ]; then
+            ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text.ttf" "$_moddir/system/product/fonts/$_extra_font"
+        fi
+        if [ "$_sys_fdir" = "/system/fonts" ] && { [ -e "/system_ext/fonts/$_extra_font" ] || [ -e "/system/system_ext/fonts/$_extra_font" ]; }; then
+            ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text.ttf" "$_moddir/system/system_ext/fonts/$_extra_font"
+        fi
     done
-
-    if [ -e "$_prod_fdir/MiSansLatinVF.ttf" ] || [ -e "/system$_prod_fdir/MiSansLatinVF.ttf" ]; then
-        ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text.ttf" "$_moddir/system/product/fonts/MiSansLatinVF.ttf"
-    fi
 
     # Universal HyperOS MiSans + Font Weight Slider Support (HyperOS 1/2/3/4):
     # ONLY enabled when a separate CJK fallback exists on the ROM (zero CJK tofu boxes!).
     if [ -n "$CT_CJK_FALLBACK" ]; then
-        for _mi_vf in MiSansVF.ttf MiLanProVF.ttf; do
+        for _mi_vf in MiSansVF.ttf MiLanProVF.ttf MiSans-Regular.ttf; do
             if [ -e "$_sys_fdir/$_mi_vf" ]; then
                 ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text.ttf" "$_moddir/system/fonts/$_mi_vf"
                 CT_MISANS_SLIDER_ACTIVE="1"
             fi
             if [ -e "$_prod_fdir/$_mi_vf" ] || [ -e "/system$_prod_fdir/$_mi_vf" ]; then
                 ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text.ttf" "$_moddir/system/product/fonts/$_mi_vf"
+                CT_MISANS_SLIDER_ACTIVE="1"
+            fi
+            if [ "$_sys_fdir" = "/system/fonts" ] && { [ -e "/system_ext/fonts/$_mi_vf" ] || [ -e "/system/system_ext/fonts/$_mi_vf" ]; }; then
+                ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text.ttf" "$_moddir/system/system_ext/fonts/$_mi_vf"
                 CT_MISANS_SLIDER_ACTIVE="1"
             fi
         done
@@ -167,16 +178,21 @@ ct_patch_all_xmls() {
             fi
         done
 
-        if [ -n "$_live_xml" ] && { [ "$_force_snap" = "1" ] || [ ! -r "$_bak_xml" ]; }; then
+        if [ -n "$_live_xml" ] && { [ "$_force_snap" = "1" ] || [ ! -s "$_bak_xml" ]; }; then
             if ! grep -q 'CoreType' "$_live_xml" 2>/dev/null; then
-                cat "$_live_xml" > "$_bak_xml" 2>/dev/null || true
+                _btmp="$_bak_xml.tmp.$$"
+                if cat "$_live_xml" > "$_btmp" 2>/dev/null && mv "$_btmp" "$_bak_xml" 2>/dev/null; then
+                    :
+                else
+                    rm -f "$_btmp" 2>/dev/null || true
+                fi
             fi
         fi
 
         _src_xml="$_bak_xml"
-        [ -r "$_src_xml" ] || _src_xml="$_live_xml"
+        [ -s "$_src_xml" ] || _src_xml="$_live_xml"
 
-        if [ -n "$_src_xml" ] && [ -r "$_src_xml" ]; then
+        if [ -n "$_src_xml" ] && [ -s "$_src_xml" ]; then
             if ct_patch_font_xml "$_src_xml" "$_dst_xml" "$_prof" "$_moddir/system/fonts"; then
                 chmod 0644 "$_dst_xml" 2>/dev/null || true
                 CT_PATCHED_COUNT=$((CT_PATCHED_COUNT + 1))
@@ -192,16 +208,21 @@ ct_patch_all_xmls() {
         _hsrc="$_root/system_ext/etc/$_hxml"
         [ -r "$_hsrc" ] || _hsrc="$_root/system/system_ext/etc/$_hxml"
 
-        if [ -r "$_hsrc" ] && { [ "$_force_snap" = "1" ] || [ ! -r "$_hbak" ]; }; then
+        if [ -r "$_hsrc" ] && { [ "$_force_snap" = "1" ] || [ ! -s "$_hbak" ]; }; then
             if ! grep -q 'CoreType' "$_hsrc" 2>/dev/null; then
-                cat "$_hsrc" > "$_hbak" 2>/dev/null || true
+                _hbtmp="$_hbak.tmp.$$"
+                if cat "$_hsrc" > "$_hbtmp" 2>/dev/null && mv "$_hbtmp" "$_hbak" 2>/dev/null; then
+                    :
+                else
+                    rm -f "$_hbtmp" 2>/dev/null || true
+                fi
             fi
         fi
 
         _huse="$_hbak"
-        [ -r "$_huse" ] || _huse="$_hsrc"
+        [ -s "$_huse" ] || _huse="$_hsrc"
 
-        if [ -n "$_huse" ] && [ -r "$_huse" ]; then
+        if [ -n "$_huse" ] && [ -s "$_huse" ]; then
             if ct_patch_font_xml "$_huse" "$_hdst" "$_prof" "$_moddir/system/fonts"; then
                 chmod 0644 "$_hdst" 2>/dev/null || true
                 CT_PATCHED_COUNT=$((CT_PATCHED_COUNT + 1))

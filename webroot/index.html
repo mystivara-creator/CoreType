@@ -41,29 +41,29 @@
         <div class="specimen-header" id="specimen-header">Display &amp; Typography</div>
         <div class="specimen-subhead" id="specimen-subhead">Dynamic Optical Master · Display vs Text</div>
         <p class="specimen-body" id="specimen-body">
-          Headers &amp; clocks render with <strong>SF Pro Display</strong> (opsz 28, −26 UPM) while
-          paragraphs &amp; chats render with <em>SF Pro Text</em> (opsz 17, −46 UPM), and Material 3
-          shifts tracking dynamically via <code>opsz</code> FeatureVariations.
+          Headers &amp; clocks adapt live via <strong>2D CoreText FeatureVariations</strong>
+          (Display Thin −14 · Title −26 · Bold −20 · Heavy −14 UPM) while paragraphs &amp; chats
+          breathe with <em>SF Pro Text</em> (−44 → −34 → −24 → −16 UPM) and graduated <code>opsz 17→28</code>.
         </p>
-        <div class="specimen-emoji">✨ 🔥 🥹 🫶🏻 🎧 🇮🇩</div>
+        <div class="specimen-emoji">&#xF8FF; ✨ 🔥 🥹 🫶🏻 🎧 🇮🇩</div>
         <div class="specimen-meta">
           <span id="specimen-meta-curve">Body 400 · Medium 485 · Header 550 · Bold 650</span>
-          <span>Flex opsz 17→28 (−46→−26)</span>
+          <span>2D opsz×wght (−44→−34→−24→−14)</span>
         </div>
       </div>
 
       <!-- Quick Presets -->
       <div class="ios-section-header">Quick Presets</div>
       <div class="preset-strip" id="preset-group" role="group" aria-label="Quick Typography Presets">
-        <button class="preset-pill interactive-glow selected" data-preset="apple_ref" data-bias="0" data-contrast="balanced" type="button">
+        <button class="preset-pill interactive-glow selected" data-preset="apple_ref" data-bias="0" data-contrast="balanced" aria-pressed="true" type="button">
           <span class="preset-name">Apple Reference</span>
           <span class="preset-sub">Bias 0 · Balanced</span>
         </button>
-        <button class="preset-pill interactive-glow" data-preset="crisp_light" data-bias="-20" data-contrast="soft" type="button">
+        <button class="preset-pill interactive-glow" data-preset="crisp_light" data-bias="-20" data-contrast="soft" aria-pressed="false" type="button">
           <span class="preset-name">Crisp Light</span>
           <span class="preset-sub">Bias −20 · Soft</span>
         </button>
-        <button class="preset-pill interactive-glow" data-preset="bold_punchy" data-bias="30" data-contrast="apple_native" type="button">
+        <button class="preset-pill interactive-glow" data-preset="bold_punchy" data-bias="30" data-contrast="apple_native" aria-pressed="false" type="button">
           <span class="preset-name">Bold Punchy</span>
           <span class="preset-sub">Bias +30 · Native</span>
         </button>
@@ -96,9 +96,9 @@
           <div class="row-title">Header Contrast</div>
           <div class="row-sub" style="margin-bottom:10px">Visual separation between body (400) &amp; section titles (600–800)</div>
           <div class="ios-segmented" id="contrast-group" role="radiogroup" aria-label="Header Contrast">
-            <button class="seg-btn interactive-glow" data-contrast="soft" type="button">Soft</button>
-            <button class="seg-btn interactive-glow selected" data-contrast="balanced" type="button">Balanced</button>
-            <button class="seg-btn interactive-glow" data-contrast="apple_native" type="button">Apple Native</button>
+            <button class="seg-btn interactive-glow" data-contrast="soft" role="radio" aria-checked="false" type="button">Soft</button>
+            <button class="seg-btn interactive-glow selected" data-contrast="balanced" role="radio" aria-checked="true" type="button">Balanced</button>
+            <button class="seg-btn interactive-glow" data-contrast="apple_native" role="radio" aria-checked="false" type="button">Apple Native</button>
           </div>
         </div>
       </div>
@@ -108,8 +108,8 @@
 
       <!-- Optical Width Profile -->
       <div class="ios-section-header">Optical Width Profile</div>
-      <div class="ios-group" id="profile-list">
-        <button class="ios-check-row interactive-glow" data-profile="dynamic_optical" type="button">
+      <div class="ios-group" id="profile-list" role="radiogroup" aria-label="Optical Width Profile">
+        <button class="ios-check-row interactive-glow" data-profile="dynamic_optical" role="radio" aria-checked="true" type="button">
           <div class="row-copy">
             <div class="row-title-line">
               <span class="row-title">iOS Optical Dynamic</span>
@@ -122,7 +122,7 @@
 
         <div class="ios-sep"></div>
 
-        <button class="ios-check-row interactive-glow" data-profile="native_pro" type="button">
+        <button class="ios-check-row interactive-glow" data-profile="native_pro" role="radio" aria-checked="false" type="button">
           <div class="row-copy">
             <div class="row-title-line">
               <span class="row-title">iOS Native Pro</span>
@@ -134,7 +134,7 @@
 
         <div class="ios-sep"></div>
 
-        <button class="ios-check-row interactive-glow" data-profile="compact_crisp" type="button">
+        <button class="ios-check-row interactive-glow" data-profile="compact_crisp" role="radio" aria-checked="false" type="button">
           <div class="row-copy">
             <div class="row-title-line">
               <span class="row-title">iOS Compact Crisp</span>
@@ -299,7 +299,7 @@
       </div>
 
       <footer class="footer">
-        CoreType v1.2.1 · HyperOS 1–4 (Android 12–17) · Mystivara Ecosystem
+        CoreType v1.2.2 · HyperOS 1–4 (Android 12–17) · Mystivara Ecosystem
       </footer>
     </section>
   </main>

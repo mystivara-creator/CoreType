@@ -1,7 +1,7 @@
 #!/system/bin/sh
 # CoreType — KernelSU-Umount-Safe Dual-Optical XML Patcher & Structural Validator
 #
-# CRITICAL ANDROID 14-16 / KERNELSU-UMOUNT ARCHITECTURE:
+# CRITICAL ANDROID 14-17 / KERNELSU-UMOUNT ARCHITECTURE:
 #   `FontManagerService` (system_server, NOT umounted) broadcasts the font paths
 #   from `font_fallback.xml` to ALL apps — including apps where KernelSU `umount`
 #   hides module-added files. If `font_fallback.xml` references a brand-new filename
@@ -12,7 +12,8 @@
 #   STRICTLY onto existing stock filenames discovered on the ROM:
 #     - CT_SLOT_TEXT  (Text opsz=17 Upright)  -> Roboto-Regular.ttf
 #     - CT_SLOT_DISP  (Display opsz=28 Upright)-> RobotoStatic-Regular.ttf / Roboto-Bold.ttf / Roboto-Regular.ttf
-#     - CT_SLOT_ITAL  (Text opsz=17 Italic)   -> Roboto-Italic.ttf / RobotoFlex-Regular.ttf / Roboto-Regular.ttf
+#     - CT_SLOT_FLEX  (Flex opsz=17..28)      -> RobotoFlex-Regular.ttf / $CT_SLOT_TEXT
+#     - CT_SLOT_ITAL  (Text opsz=17 Italic)   -> Roboto-Italic.ttf / RobotoStatic-Italic.ttf / ... / $CT_SLOT_TEXT
 #     - CT_SLOT_DITAL (Display opsz=28 Italic)-> Roboto-BoldItalic.ttf / $CT_SLOT_ITAL
 #
 #   Result: Mounted processes get 100% true Dual-Optical SF Pro (Display + Text + Italic),
@@ -33,7 +34,7 @@ ct_resolve_stock_slots() {
         CT_SLOT_DISP="$CT_SLOT_TEXT"
     fi
 
-    # Dedicated continuous-opsz slot (opsz 12..36) for Jetpack Compose & Material 3 roboto-flex
+    # Dedicated continuous-opsz slot (opsz 17..28) for Jetpack Compose & Material 3 roboto-flex
     if [ -e "$_sdir/RobotoFlex-Regular.ttf" ]; then
         CT_SLOT_FLEX="RobotoFlex-Regular.ttf"
     else
@@ -178,7 +179,8 @@ ct_detect_xml_curve_mode() {
 # Dynamic Weight Curve Calculator:
 #   wght_out = clamp(base(slot, rom_curve) + contrast_delta(slot, contrast_mode) + tapered_bias(slot, weight_bias), 100, 950)
 # Usage: ct_calc_wght <slot_weight>
-ct_calc_wght() {
+# In-shell zero-fork calculator storing result in CT_WGHT_RESULT
+ct_calc_wght_val() {
     _slot="$1"
     _rom="${CT_ROM_CURVE:-hyperos_mipro}"
     _cm="${CT_CONTRAST_MODE:-balanced}"
@@ -249,108 +251,90 @@ ct_calc_wght() {
     _out=$((_base + _cdelta + _bdelta))
     [ "$_out" -lt 100 ] && _out=100
     [ "$_out" -gt 950 ] && _out=950
-    printf '%s' "$_out"
+    CT_WGHT_RESULT="$_out"
+}
+
+ct_calc_wght() {
+    ct_calc_wght_val "$1"
+    printf '%s' "$CT_WGHT_RESULT"
+}
+
+ct_precompute_weights() {
+    ct_calc_wght_val 100; CT_W100="$CT_WGHT_RESULT"
+    ct_calc_wght_val 200; CT_W200="$CT_WGHT_RESULT"
+    ct_calc_wght_val 300; CT_W300="$CT_WGHT_RESULT"
+    ct_calc_wght_val 350; CT_W350="$CT_WGHT_RESULT"
+    ct_calc_wght_val 400; CT_W400="$CT_WGHT_RESULT"
+    ct_calc_wght_val 500; CT_W500="$CT_WGHT_RESULT"
+    ct_calc_wght_val 600; CT_W600="$CT_WGHT_RESULT"
+    ct_calc_wght_val 700; CT_W700="$CT_WGHT_RESULT"
+    ct_calc_wght_val 800; CT_W800="$CT_WGHT_RESULT"
+    ct_calc_wght_val 900; CT_W900="$CT_WGHT_RESULT"
+    ct_calc_wght_val 950; CT_W950="$CT_WGHT_RESULT"
 }
 
 ct_emit_sans_serif_entries() {
     # Thin / Light (Lockscreen Clocks & Display Hero) -> SF Pro Display (opsz=28 + Display trak)
-    _w100=$(ct_calc_wght 100)
-    _w200=$(ct_calc_wght 200)
-    _w300=$(ct_calc_wght 300)
-    _w350=$(ct_calc_wght 350)
-    _w400=$(ct_calc_wght 400)
-    _w500=$(ct_calc_wght 500)
-    _w600=$(ct_calc_wght 600)
-    _w700=$(ct_calc_wght 700)
-    _w800=$(ct_calc_wght 800)
-    _w900=$(ct_calc_wght 900)
-    _w950=$(ct_calc_wght 950)
-
-    ct_emit_font_entry 100 normal display "$CT_WDTH_DISP" "$_w100"
-    ct_emit_font_entry 100 italic display "$CT_WDTH_DISP" "$_w100"
-    ct_emit_font_entry 200 normal display "$CT_WDTH_DISP" "$_w200"
-    ct_emit_font_entry 200 italic display "$CT_WDTH_DISP" "$_w200"
-    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP" "$_w300"
-    ct_emit_font_entry 300 italic display "$CT_WDTH_DISP" "$_w300"
+    ct_emit_font_entry 100 normal display "$CT_WDTH_DISP" "$CT_W100"
+    ct_emit_font_entry 100 italic display "$CT_WDTH_DISP" "$CT_W100"
+    ct_emit_font_entry 200 normal display "$CT_WDTH_DISP" "$CT_W200"
+    ct_emit_font_entry 200 italic display "$CT_WDTH_DISP" "$CT_W200"
+    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP" "$CT_W300"
+    ct_emit_font_entry 300 italic display "$CT_WDTH_DISP" "$CT_W300"
     # Body / Notes Editor / Chat / UI Labels -> SF Pro Text (opsz=17 + Text trak)
-    ct_emit_font_entry 350 normal text "$CT_WDTH_TEXT" "$_w350"
-    ct_emit_font_entry 400 normal text "$CT_WDTH_TEXT" "$_w400"
-    ct_emit_font_entry 400 italic text "$CT_WDTH_TEXT" "$_w400"
-    ct_emit_font_entry 500 normal text "$CT_WDTH_MID" "$_w500"
-    ct_emit_font_entry 500 italic text "$CT_WDTH_MID" "$_w500"
+    ct_emit_font_entry 350 normal text "$CT_WDTH_TEXT" "$CT_W350"
+    ct_emit_font_entry 400 normal text "$CT_WDTH_TEXT" "$CT_W400"
+    ct_emit_font_entry 400 italic text "$CT_WDTH_TEXT" "$CT_W400"
+    ct_emit_font_entry 500 normal text "$CT_WDTH_MID" "$CT_W500"
+    ct_emit_font_entry 500 italic text "$CT_WDTH_MID" "$CT_W500"
     # Headers / Section Labels / Bold -> SF Pro Display (opsz=28 + Display trak)
-    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP" "$_w600"
-    ct_emit_font_entry 600 italic display "$CT_WDTH_DISP" "$_w600"
-    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP" "$_w700"
-    ct_emit_font_entry 700 italic display "$CT_WDTH_DISP" "$_w700"
-    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP" "$_w800"
-    ct_emit_font_entry 800 italic display "$CT_WDTH_DISP" "$_w800"
-    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP" "$_w900"
-    ct_emit_font_entry 900 italic display "$CT_WDTH_DISP" "$_w900"
-    ct_emit_font_entry 950 normal display "$CT_WDTH_DISP" "$_w950"
+    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP" "$CT_W600"
+    ct_emit_font_entry 600 italic display "$CT_WDTH_DISP" "$CT_W600"
+    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP" "$CT_W700"
+    ct_emit_font_entry 700 italic display "$CT_WDTH_DISP" "$CT_W700"
+    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP" "$CT_W800"
+    ct_emit_font_entry 800 italic display "$CT_WDTH_DISP" "$CT_W800"
+    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP" "$CT_W900"
+    ct_emit_font_entry 900 italic display "$CT_WDTH_DISP" "$CT_W900"
+    ct_emit_font_entry 950 normal display "$CT_WDTH_DISP" "$CT_W950"
 }
 
 ct_emit_condensed_entries() {
-    _w300=$(ct_calc_wght 300)
-    _w400=$(ct_calc_wght 400)
-    _w500=$(ct_calc_wght 500)
-    _w600=$(ct_calc_wght 600)
-    _w700=$(ct_calc_wght 700)
-
-    ct_emit_font_entry 300 normal display "$CT_WDTH_COND" "$_w300"
-    ct_emit_font_entry 400 normal text "$CT_WDTH_COND" "$_w400"
-    ct_emit_font_entry 400 italic text "$CT_WDTH_COND" "$_w400"
-    ct_emit_font_entry 500 normal text "$CT_WDTH_COND" "$_w500"
-    ct_emit_font_entry 600 normal display "$CT_WDTH_COND" "$_w600"
-    ct_emit_font_entry 700 normal display "$CT_WDTH_COND" "$_w700"
-    ct_emit_font_entry 700 italic display "$CT_WDTH_COND" "$_w700"
+    ct_emit_font_entry 300 normal display "$CT_WDTH_COND" "$CT_W300"
+    ct_emit_font_entry 400 normal text "$CT_WDTH_COND" "$CT_W400"
+    ct_emit_font_entry 400 italic text "$CT_WDTH_COND" "$CT_W400"
+    ct_emit_font_entry 500 normal text "$CT_WDTH_COND" "$CT_W500"
+    ct_emit_font_entry 600 normal display "$CT_WDTH_COND" "$CT_W600"
+    ct_emit_font_entry 700 normal display "$CT_WDTH_COND" "$CT_W700"
+    ct_emit_font_entry 700 italic display "$CT_WDTH_COND" "$CT_W700"
 }
 
 ct_emit_display_entries() {
-    _w300=$(ct_calc_wght 300)
-    _w400=$(ct_calc_wght 400)
-    _w500=$(ct_calc_wght 500)
-    _w600=$(ct_calc_wght 600)
-    _w700=$(ct_calc_wght 700)
-    _w800=$(ct_calc_wght 800)
-    _w900=$(ct_calc_wght 900)
-
-    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP" "$_w300"
-    ct_emit_font_entry 400 normal display "$CT_WDTH_DISP" "$_w400"
-    ct_emit_font_entry 500 normal display "$CT_WDTH_DISP" "$_w500"
-    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP" "$_w600"
-    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP" "$_w700"
-    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP" "$_w800"
-    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP" "$_w900"
+    ct_emit_font_entry 300 normal display "$CT_WDTH_DISP" "$CT_W300"
+    ct_emit_font_entry 400 normal display "$CT_WDTH_DISP" "$CT_W400"
+    ct_emit_font_entry 500 normal display "$CT_WDTH_DISP" "$CT_W500"
+    ct_emit_font_entry 600 normal display "$CT_WDTH_DISP" "$CT_W600"
+    ct_emit_font_entry 700 normal display "$CT_WDTH_DISP" "$CT_W700"
+    ct_emit_font_entry 800 normal display "$CT_WDTH_DISP" "$CT_W800"
+    ct_emit_font_entry 900 normal display "$CT_WDTH_DISP" "$CT_W900"
 }
 
 ct_emit_flex_entries() {
-    _w100=$(ct_calc_wght 100)
-    _w200=$(ct_calc_wght 200)
-    _w300=$(ct_calc_wght 300)
-    _w350=$(ct_calc_wght 350)
-    _w400=$(ct_calc_wght 400)
-    _w500=$(ct_calc_wght 500)
-    _w600=$(ct_calc_wght 600)
-    _w700=$(ct_calc_wght 700)
-    _w800=$(ct_calc_wght 800)
-    _w900=$(ct_calc_wght 900)
-    _w950=$(ct_calc_wght 950)
-
-    ct_emit_flex_font_entry 100 normal 28 "$CT_WDTH_DISP" "$_w100"
-    ct_emit_flex_font_entry 200 normal 28 "$CT_WDTH_DISP" "$_w200"
-    ct_emit_flex_font_entry 300 normal 28 "$CT_WDTH_DISP" "$_w300"
-    ct_emit_flex_font_entry 350 normal 17 "$CT_WDTH_TEXT" "$_w350"
-    ct_emit_flex_font_entry 400 normal 17 "$CT_WDTH_TEXT" "$_w400"
-    ct_emit_flex_font_entry 400 italic 17 "$CT_WDTH_TEXT" "$_w400"
-    ct_emit_flex_font_entry 500 normal 17 "$CT_WDTH_MID" "$_w500"
-    ct_emit_flex_font_entry 500 italic 17 "$CT_WDTH_MID" "$_w500"
-    ct_emit_flex_font_entry 600 normal 28 "$CT_WDTH_DISP" "$_w600"
-    ct_emit_flex_font_entry 700 normal 28 "$CT_WDTH_DISP" "$_w700"
-    ct_emit_flex_font_entry 700 italic 28 "$CT_WDTH_DISP" "$_w700"
-    ct_emit_flex_font_entry 800 normal 28 "$CT_WDTH_DISP" "$_w800"
-    ct_emit_flex_font_entry 900 normal 28 "$CT_WDTH_DISP" "$_w900"
-    ct_emit_flex_font_entry 950 normal 28 "$CT_WDTH_DISP" "$_w950"
+    # Graduated Apple CoreText optical ramp (Body 17 -> Medium 18 -> Title3 21 -> Title2 24 -> Display 28)
+    ct_emit_flex_font_entry 100 normal 28 "$CT_WDTH_DISP" "$CT_W100"
+    ct_emit_flex_font_entry 200 normal 28 "$CT_WDTH_DISP" "$CT_W200"
+    ct_emit_flex_font_entry 300 normal 24 "$CT_WDTH_DISP" "$CT_W300"
+    ct_emit_flex_font_entry 350 normal 17 "$CT_WDTH_TEXT" "$CT_W350"
+    ct_emit_flex_font_entry 400 normal 17 "$CT_WDTH_TEXT" "$CT_W400"
+    ct_emit_flex_font_entry 400 italic 17 "$CT_WDTH_TEXT" "$CT_W400"
+    ct_emit_flex_font_entry 500 normal 18 "$CT_WDTH_MID" "$CT_W500"
+    ct_emit_flex_font_entry 500 italic 18 "$CT_WDTH_MID" "$CT_W500"
+    ct_emit_flex_font_entry 600 normal 21 "$CT_WDTH_DISP" "$CT_W600"
+    ct_emit_flex_font_entry 700 normal 24 "$CT_WDTH_DISP" "$CT_W700"
+    ct_emit_flex_font_entry 700 italic 24 "$CT_WDTH_DISP" "$CT_W700"
+    ct_emit_flex_font_entry 800 normal 28 "$CT_WDTH_DISP" "$CT_W800"
+    ct_emit_flex_font_entry 900 normal 28 "$CT_WDTH_DISP" "$CT_W900"
+    ct_emit_flex_font_entry 950 normal 28 "$CT_WDTH_DISP" "$CT_W950"
 }
 
 # Structural XML sanity check (prevents malformed XML or missing slot files from reaching Zygote)
@@ -422,9 +406,8 @@ ct_validate_font_xml() {
     return 0
 }
 
-ct_emit_cjk_zh_hans_block() {
+ct_emit_cjk_zh_hans_entries() {
     _cjk="$1"
-    printf '    <family lang="zh-Hans">\n'
     case "$_cjk" in
         *.ttc)
             printf '        <font weight="400" style="normal" index="2">%s</font>\n' "$_cjk"
@@ -440,7 +423,6 @@ ct_emit_cjk_zh_hans_block() {
             printf '        <font weight="400" style="normal">%s</font>\n' "$_cjk"
             ;;
     esac
-    printf '    </family>\n'
 }
 
 # Usage: ct_patch_font_xml <src_xml> <dst_xml> <profile_id> [fonts_dir]
@@ -453,6 +435,7 @@ ct_patch_font_xml() {
     [ -r "$_src" ] || return 1
     ct_load_profile "$_prof"
     ct_detect_xml_curve_mode "$_src"
+    ct_precompute_weights
     [ -n "${CT_SLOT_TEXT:-}" ] || ct_resolve_stock_slots "/system/fonts"
 
     mkdir -p "$(dirname "$_dst")" || return 1
@@ -471,7 +454,7 @@ ct_patch_font_xml() {
 
     _cjk_redirect="0"
     if [ "${CT_MISANS_SLIDER_ACTIVE:-0}" = "1" ] && [ -n "${CT_CJK_FALLBACK:-}" ]; then
-        ct_emit_cjk_zh_hans_block "$CT_CJK_FALLBACK" > "$_cjk_file"
+        ct_emit_cjk_zh_hans_entries "$CT_CJK_FALLBACK" > "$_cjk_file"
         _cjk_redirect="1"
     else
         : > "$_cjk_file"
@@ -500,12 +483,31 @@ ct_patch_font_xml() {
         }
         function classify_family(line) {
             if (line ~ /name="roboto-flex"/) return "flex"
-            if (line ~ /name="(sans-serif|mipro|misans|misans-latin|miui|google-sans|google-sans-text|google-sans-medium|inter)"/) return "sans"
+            if (line ~ /name="(sans-serif|mipro|misans|misans-vf|misans-latin|misans-global|mi-sans|miui|google-sans|google-sans-text|google-sans-medium|inter)"/) return "sans"
             if (line ~ /name="sans-serif-condensed"/) return "cond"
             if (line ~ /name="(sans-serif-display|google-sans-display|mipro-display)"/) return "disp"
             if (cjk_on == "1" && line ~ /lang="zh-Hans"/) return "zh_hans"
             if (line ~ /<family[ \t]*>/) return "unnamed"
             return "other"
+        }
+        function flush_family() {
+            if (fam_type == "sans") {
+                emit_wrapped(fam_open, sans_f, 1)
+            } else if (fam_type == "flex") {
+                emit_wrapped(fam_open, flex_f, 0)
+            } else if (fam_type == "cond") {
+                emit_wrapped(fam_open, cond_f, 0)
+            } else if (fam_type == "disp") {
+                emit_wrapped(fam_open, disp_f, 0)
+            } else if (fam_type == "zh_hans" && (fam_buf ~ /MiSansVF\.ttf/ || fam_buf ~ /MiLanProVF\.ttf/ || fam_buf ~ /MiSansGlobalVF\.ttf/)) {
+                emit_wrapped(fam_open, cjk_f, 0)
+            } else if (fam_type == "unnamed" && (fam_buf ~ /MiSansLatinVF\.ttf/ || fam_buf ~ /MiSansVF_Overlay\.ttf/ || fam_buf ~ /MiSansGlobalVF\.ttf/ || fam_buf ~ /Roboto-Regular\.ttf/)) {
+                emit_wrapped("    <family>", sans_f, 1)
+            } else {
+                printf "%s", fam_buf
+            }
+            in_fam = 0
+            fam_buf = ""
         }
         BEGIN {
             in_fam = 0
@@ -531,37 +533,14 @@ ct_patch_font_xml() {
             fam_open = extract_open_tag($0)
             fam_type = classify_family($0)
             if ($0 ~ /<\/family>/) {
-                if (fam_type == "sans") emit_wrapped(fam_open, sans_f, 1)
-                else if (fam_type == "flex") emit_wrapped(fam_open, flex_f, 0)
-                else if (fam_type == "cond") emit_wrapped(fam_open, cond_f, 0)
-                else if (fam_type == "disp") emit_wrapped(fam_open, disp_f, 0)
-                else if (fam_type == "zh_hans" && fam_buf ~ /MiSansVF\.ttf|MiLanProVF\.ttf/) dump_file(cjk_f)
-                else printf "%s", fam_buf
-                in_fam = 0
-                fam_buf = ""
+                flush_family()
             }
             next
         }
         in_fam == 1 {
             fam_buf = fam_buf $0 "\n"
             if ($0 ~ /<\/family>/) {
-                if (fam_type == "sans") {
-                    emit_wrapped(fam_open, sans_f, 1)
-                } else if (fam_type == "flex") {
-                    emit_wrapped(fam_open, flex_f, 0)
-                } else if (fam_type == "cond") {
-                    emit_wrapped(fam_open, cond_f, 0)
-                } else if (fam_type == "disp") {
-                    emit_wrapped(fam_open, disp_f, 0)
-                } else if (fam_type == "zh_hans" && (fam_buf ~ /MiSansVF\.ttf/ || fam_buf ~ /MiLanProVF\.ttf/)) {
-                    dump_file(cjk_f)
-                } else if (fam_type == "unnamed" && (fam_buf ~ /MiSansLatinVF\.ttf/ || fam_buf ~ /Roboto-Regular\.ttf/)) {
-                    emit_wrapped("    <family>", sans_f, 1)
-                } else {
-                    printf "%s", fam_buf
-                }
-                in_fam = 0
-                fam_buf = ""
+                flush_family()
             }
             next
         }

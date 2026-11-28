@@ -76,19 +76,41 @@ jobs:
           assert all(g["dx"] == 0 for g in d_disp), f"Unexpected negative tracking on Display digits: {d_disp}"
           d_flex_disp = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=28,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "100"], text=True))
           assert all(g["dx"] == 0 for g in d_flex_disp), f"Unexpected negative tracking on Flex Display (opsz=28) digits: {d_flex_disp}"
-          flex_12 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=12,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
-          flex_22 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=22,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
-          flex_36 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=36,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
-          w12 = sum(g["ax"] for g in flex_12)
-          w22 = sum(g["ax"] for g in flex_22)
-          w36 = sum(g["ax"] for g in flex_36)
-          assert w12 != w22 and w22 != w36 and w12 != w36, f"Flex continuous opsz axis had no visual advance delta ({w12} / {w22} / {w36})!"
-          dx_text = min(g["dx"] for g in flex_12)
-          dx_disp = min(g["dx"] for g in flex_36)
-          assert dx_text < dx_disp < 0, f"Flex GPOS FeatureVariations did not relax tracking from Text to Display (dx_text={dx_text}, dx_disp={dx_disp})!"
+          flex_17 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=17,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
+          flex_21 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=21,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
+          flex_28 = json.loads(subprocess.check_output(["hb-shape", "--variations=opsz=28,wght=400", "--output-format=json", "fonts/CoreType-SFPro-Flex.ttf", "Typography"], text=True))
+          w17 = sum(g["ax"] for g in flex_17)
+          w21 = sum(g["ax"] for g in flex_21)
+          w28 = sum(g["ax"] for g in flex_28)
+          assert w17 != w21 and w21 != w28 and w17 != w28, f"Flex continuous opsz axis had no visual advance delta ({w17} / {w21} / {w28})!"
+          dx_text = min(g["dx"] for g in flex_17)
+          dx_semi = min(g["dx"] for g in flex_21)
+          dx_disp = min(g["dx"] for g in flex_28)
+          assert dx_text < dx_semi < dx_disp < 0, f"Flex 2D opsz FeatureVariations did not graduate -46->-34->-24 (dx={dx_text}/{dx_semi}/{dx_disp})!"
+          txt_reg = min(g["dx"] for g in json.loads(subprocess.check_output(["hb-shape", "--variations=wght=400", "--output-format=json", "fonts/CoreType-SFPro-Text.ttf", "Typography"], text=True)))
+          txt_med = min(g["dx"] for g in json.loads(subprocess.check_output(["hb-shape", "--variations=wght=500", "--output-format=json", "fonts/CoreType-SFPro-Text.ttf", "Typography"], text=True)))
+          txt_bld = min(g["dx"] for g in json.loads(subprocess.check_output(["hb-shape", "--variations=wght=650", "--output-format=json", "fonts/CoreType-SFPro-Text.ttf", "Typography"], text=True)))
+          txt_hvy = min(g["dx"] for g in json.loads(subprocess.check_output(["hb-shape", "--variations=wght=850", "--output-format=json", "fonts/CoreType-SFPro-Text.ttf", "Typography"], text=True)))
+          assert txt_reg < txt_med < txt_bld < txt_hvy < 0, f"Text wght FeatureVariations did not relax cleanly ({txt_reg} -> {txt_med} -> {txt_bld} -> {txt_hvy})!"
+          u_rn = json.loads(subprocess.check_output(["hb-shape", "--variations=wght=400", "--output-format=json", "fonts/CoreType-SFPro-Text.ttf", "Username"], text=True))
+          assert u_rn[3]["dx"] > u_rn[4]["dx"], f"Lowercase r did not get anti-collision clearance in Username: {u_rn[3]} vs {u_rn[4]}"
+          dsp_thn = min(g["dx"] for g in json.loads(subprocess.check_output(["hb-shape", "--variations=wght=200", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "Typography"], text=True)))
+          dsp_reg = min(g["dx"] for g in json.loads(subprocess.check_output(["hb-shape", "--variations=wght=500", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "Typography"], text=True)))
+          dsp_bld = min(g["dx"] for g in json.loads(subprocess.check_output(["hb-shape", "--variations=wght=650", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "Typography"], text=True)))
+          dsp_hvy = min(g["dx"] for g in json.loads(subprocess.check_output(["hb-shape", "--variations=wght=850", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "Typography"], text=True)))
+          assert dsp_reg < dsp_bld < dsp_hvy < 0 and dsp_reg < dsp_thn < 0, f"Display wght FeatureVariations did not adapt ({dsp_thn} / {dsp_reg} / {dsp_bld} / {dsp_hvy})!"
           s_jdm = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Text.ttf", "Yanz 25 \u02b2\u1d48\u1d50"], text=True))
           assert all(g["g"] != ".notdef" for g in s_jdm), f"Missing superscript glyph in Phonetic Extensions: {s_jdm}"
-          print(f"[PASS] HarfBuzz GPOS tracking, Flex continuous opsz (12:{w12} -> 22:{w22} -> 36:{w36}) + FeatureVariations (dx {dx_text}->{dx_disp}), pure digit spacing (100), Phonetic Extensions & Apple calt colon verified ({c_text} -> {c_clock})")
+          for f_logo in [
+              "fonts/CoreType-SFPro-Text.ttf",
+              "fonts/CoreType-SFPro-Display.ttf",
+              "fonts/CoreType-SFPro-Flex.ttf",
+              "fonts/CoreType-SFPro-GMS-Medium.ttf",
+              "fonts/CoreType-SFPro-GMS-Bold.ttf",
+          ]:
+              s_apple = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", f_logo, "\uf8ff"], text=True))
+              assert len(s_apple) == 1 and s_apple[0]["g"] != ".notdef" and s_apple[0]["ax"] > 0 and s_apple[0]["dx"] == 0, f"Missing/corrupt Apple logo U+F8FF in {f_logo}: {s_apple}"
+          print(f"[PASS] HarfBuzz 2D GPOS FeatureVariations verified: Flex opsz(17:{dx_text} -> 21:{dx_semi} -> 28:{dx_disp}), Text wght({txt_reg}->{txt_bld}->{txt_hvy}), Display wght(Thin:{dsp_thn}, Reg:{dsp_reg}, Heavy:{dsp_hvy}), Apple logo U+F8FF, pure digits & calt colon ({c_text}->{c_clock})")
           PY
 
       - name: Package CoreType Lite (SF Pro Only)
@@ -149,6 +171,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF_NAME}"
+          MOD_VER=$(grep '^version=' module.prop | cut -d= -f2)
+          if [ "$TAG" != "$MOD_VER" ]; then
+            echo "ERROR: Git tag ($TAG) does not match module.prop version ($MOD_VER)!"
+            exit 1
+          fi
           FULL_ZIP="dist/CoreType-${TAG}-Full.zip"
           LITE_ZIP="dist/CoreType-${TAG}-Lite.zip"
           FULL_SHA=$(sha256sum "$FULL_ZIP" | awk '{print $1}')
@@ -170,10 +197,10 @@ jobs:
           ---
 
           ### Highlights
-          - **Dynamic \`opsz\`-Aware GPOS \`FeatureVariations\` & Semi-Display GMS Bold:** \`CoreType-SFPro-Flex.ttf\` (\`RobotoFlex-Regular.ttf\`) automatically transitions Apple tracking from **−46 UPM** (Text, \`opsz < 22\`) to **−26 UPM** (Display, \`opsz >= 22\`) inside Android HarfBuzz/Minikin, while \`CoreType-SFPro-GMS-Bold.ttf\` uses **Semi-Display (\`opsz=24\`)** proportions for crisp iOS-style headings across Play Store, Gmail, Maps, Photos, and Gboard (excluding \`Google_Sans_Code\` monospace).
-          - **iOS 27 Liquid Glass & Settings Native 3-Tab WebUI:** Auto Light & Dark (\`prefers-color-scheme\`) with layered Liquid Glass lensing, interactive pointer inner-glow, **3-Tab Bottom Dock** (\`Typography\` · \`Ecosystem\` · \`Engine\`), **3 Quick Curve Presets**, **Instant Live-Apply** for Universal GMS App Fonts (\`SIGUSR1 < 5 ms\`, zero reboot), and **Tinted Solid Surfaces** accessibility mode (\`prefers-reduced-transparency\`).
-          - **Native C++20 Event-Driven Daemon (\`coretype-watchd\`, ARM64):** Zero-polling \`epoll\` + \`inotify\` + dual \`timerfd\` (250 ms batch debounce + bounded \`1s → 3s → 10s\` self-healing recovery) + \`signalfd\` (< 300 KB private RAM, 0% idle CPU, 0 wakelock, isolated \`/dev/.coretype/\`). Reports \`daemon_private_kb\` alongside \`daemon_rss_kb\`, supports live \`umount2(MNT_DETACH)\` on toggle OFF, and syncs live mount counts cleanly into \`state.prop\` & \`action.sh --diag\`.
-          - **4:1 Vertical Metrics Parity, Dynamic Weight Curve & Apple iOS 26.4 Emoji:** \`1968 / −492\` CJK-aligned metrics, \`tnum\` + \`calt\` (\`09:41\`), stock \`MiClock*.otf\` preservation, MiSans Font Weight slider support, and KernelSU-umount-safe Apple iOS 26.4 Color Emoji.
+          - **2D (\`opsz\` × \`wght\`) Apple CoreText-Parity GPOS \`FeatureVariations\`:** Post-\`avar\` weight- and optical-size-adaptive tracking across **all 5 variable masters** — \`SF Pro Text\` relaxes smoothly as weight increases (\`−46 → −32 → −20 UPM\`, bringing HyperOS MiSans Weight Slider to life), \`SF Pro Display\` adapts airy UltraLight/Thin clocks (\`−14 UPM\`), crisp titles (\`−26 UPM\`), and Heavy/Black (\`−16 UPM\`), and \`SF Pro Flex\` graduates \`opsz 17 → 18 → 21 → 24 → 28\` across Apple's exact 20pt/24pt thresholds (\`−46 → −34 → −24 → −16 UPM\`) with precision currency/bracket/quote spacing and RIBBI-compliant GMS static weights.
+          - **iOS 27 Liquid Glass WebUI (100% Weight-Curve Parity & Atomic Config):** Exact 1:1 live specimen preview matching \`lib/font_xml.sh\`, serialized atomic multi-key preset writes, reliable Android WebView tap/drag dock handling, \`Pending Reboot\` state indicator, ARIA accessibility roles, and auto-refreshing Engine telemetry.
+          - **Hardened C++20 Event-Driven Daemon (\`coretype-watchd\`, ARM64):** Inode-aware \`WatchManager\` (\`IN_MOVE_SELF\` + atomic \`IN_MOVED_TO | IN_ISDIR\` + \`IN_Q_OVERFLOW\` recovery), 4 MB \`/proc/self/mountinfo\` cap for Android 16/17 mount propagation, instant \`epoll\` FBE shutdown, PID \`/proc/<pid>/cmdline\` safety, and Meta \`app_ras_blobs\` visibility in \`action.sh --diag\`.
+          - **4:1 Vertical Metrics Parity, Full Apple Symbols (\`\` \`U+F8FF\` + SF Symbols), Dynamic Weight Curve & Apple iOS 26.4 Emoji:** \`1968 / −492\` CJK-aligned metrics, **100% full Apple Symbols & PUA glyphs preserved** (zero symbol tofu boxes, demand-paged via Android shared \`mmap\` with zero runtime CPU/RAM overhead and native sidebearings), \`tnum\` + \`calt\` (\`09:41\`), stock \`MiClock*.otf\` preservation, MiSans Font Weight slider support, and KernelSU-umount-safe Apple iOS 26.4 Color Emoji.
 
           ---
 

@@ -45,7 +45,7 @@ namespace {
 constexpr int kDebounceMs = 250;
 constexpr int kRecoveryBackoffMs[] = {1000, 3000, 10000};
 constexpr int kRecoveryStepCount = 3;
-constexpr int kTextTrackingUpm = -46;
+constexpr int kTextTrackingUpm = -44;
 constexpr int kDisplayTrackingUpm = -26;
 constexpr char kSelinuxSystemFile[] = "u:object_r:system_file:s0";
 
@@ -122,7 +122,7 @@ bool write_file_atomic(const std::string& path, const std::string& content, mode
     return true;
 }
 
-std::string read_small_file(const std::string& path) {
+std::string read_small_file(const std::string& path, size_t max_bytes = 262144) {
     int fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
     if (fd < 0) return {};
     std::string out;
@@ -135,7 +135,7 @@ std::string read_small_file(const std::string& path) {
         }
         if (n == 0) break;
         out.append(buf, static_cast<size_t>(n));
-        if (out.size() > 262144) break;
+        if (out.size() >= max_bytes) break;
     }
     ::close(fd);
     return out;
@@ -245,33 +245,85 @@ std::string unescape_mount_path(std::string_view raw) {
     return out;
 }
 
-std::unordered_set<std::string> load_active_mounts() {
+bool is_relevant_mount_path(const Config& cfg, std::string_view p) {
+    if (!ends_with(p, ".ttf")) return false;
+    return starts_with(p, cfg.gms_files_root) ||
+           starts_with(p, cfg.data_fonts_root) ||
+           p.find("/com.google.android.gms/files/fonts/") != std::string_view::npos ||
+           p.find("/data/fonts/files/") != std::string_view::npos ||
+           (p.find("/com.facebook.") != std::string_view::npos &&
+            p.find("/app_ras_blobs/") != std::string_view::npos);
+}
+
+// Stream /proc/self/mountinfo line-by-line with a fixed 8 KB stack buffer (zero large heap
+// allocations -> keeps daemon_private_kb < 300 KB even when mountinfo exceeds 512 KB).
+std::unordered_set<std::string> load_active_mounts(const Config& cfg) {
     std::unordered_set<std::string> mounts;
-    std::string data = read_small_file("/proc/self/mountinfo");
-    bool use_mountinfo = !data.empty();
+    int fd = ::open("/proc/self/mountinfo", O_RDONLY | O_CLOEXEC);
+    bool use_mountinfo = (fd >= 0);
     if (!use_mountinfo) {
-        data = read_small_file("/proc/mounts");
+        fd = ::open("/proc/mounts", O_RDONLY | O_CLOEXEC);
+        if (fd < 0) return mounts;
     }
-    size_t start = 0;
-    while (start < data.size()) {
-        size_t end = data.find('\n', start);
-        if (end == std::string::npos) end = data.size();
-        std::string_view line(data.data() + start, end - start);
-        int target_field = use_mountinfo ? 4 : 1;
+
+    const int target_field = use_mountinfo ? 4 : 1;
+    std::string line;
+    line.reserve(512);
+    char buf[8192];
+
+    auto process_line = [&](std::string_view lv) {
         int field = 0;
         size_t i = 0;
-        while (i < line.size()) {
-            while (i < line.size() && line[i] == ' ') ++i;
+        while (i < lv.size()) {
+            while (i < lv.size() && lv[i] == ' ') ++i;
             size_t tok_start = i;
-            while (i < line.size() && line[i] != ' ') ++i;
+            while (i < lv.size() && lv[i] != ' ') ++i;
             if (field == target_field && i > tok_start) {
-                mounts.insert(unescape_mount_path(line.substr(tok_start, i - tok_start)));
+                std::string unescaped = unescape_mount_path(lv.substr(tok_start, i - tok_start));
+                if (is_relevant_mount_path(cfg, unescaped)) {
+                    mounts.insert(std::move(unescaped));
+                }
                 break;
             }
             ++field;
         }
-        start = end + 1;
+    };
+
+    for (;;) {
+        ssize_t n = ::read(fd, buf, sizeof(buf));
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (n == 0) break;
+
+        size_t pos = 0;
+        const size_t len = static_cast<size_t>(n);
+        while (pos < len) {
+            const char* nl = static_cast<const char*>(::memchr(buf + pos, '\n', len - pos));
+            if (nl != nullptr) {
+                const size_t chunk = static_cast<size_t>(nl - (buf + pos));
+                if (line.empty()) {
+                    process_line(std::string_view(buf + pos, chunk));
+                } else {
+                    line.append(buf + pos, chunk);
+                    process_line(line);
+                    line.clear();
+                }
+                pos += chunk + 1;
+            } else {
+                line.append(buf + pos, len - pos);
+                if (line.size() > 16384) {
+                    line.clear();
+                }
+                break;
+            }
+        }
     }
+    if (!line.empty()) {
+        process_line(line);
+    }
+    ::close(fd);
     return mounts;
 }
 
@@ -286,9 +338,12 @@ bool valid_apple_emoji_master(const std::string& path) {
 }
 
 void prepare_font_source(const std::string& path) {
+    static std::unordered_set<std::string> prepared;
+    if (prepared.find(path) != prepared.end()) return;
     if (!file_exists(path)) return;
     ::chmod(path.c_str(), 0644);
     (void)::setxattr(path.c_str(), "security.selinux", kSelinuxSystemFile, sizeof(kSelinuxSystemFile), 0);
+    prepared.insert(path);
 }
 
 bool is_latin_ui_gms_font(std::string_view base) {
@@ -403,7 +458,15 @@ void detach_disabled_mounts(const Config& cfg, bool want_latin, bool want_emoji,
         }
     }
     for (const auto& dst : to_detach) {
-        if (::umount2(dst.c_str(), MNT_DETACH) == 0) {
+        bool detached_any = false;
+        for (int attempt = 0; attempt < 8; ++attempt) {
+            if (::umount2(dst.c_str(), MNT_DETACH) == 0) {
+                detached_any = true;
+            } else {
+                break;
+            }
+        }
+        if (detached_any) {
             mounted.erase(dst);
         }
     }
@@ -466,7 +529,7 @@ SyncStats perform_sync(const Config& cfg) {
     const bool want_latin = (gms_latin_flag != "0");
     const bool want_emoji = (emoji_flag != "0");
 
-    std::unordered_set<std::string> mounted = load_active_mounts();
+    std::unordered_set<std::string> mounted = load_active_mounts(cfg);
 
     // Live-unmount any previously active GMS mounts when user toggles OFF in WebUI
     detach_disabled_mounts(cfg, want_latin, want_emoji, mounted);
@@ -561,28 +624,59 @@ public:
         : ifd_(inotify_fd), target_ot_(target_ot_dir) {}
 
     void ensure_watch(const std::string& path, uint32_t mask) {
-        if (!dir_exists(path)) return;
-        if (path_to_wd_.find(path) != path_to_wd_.end()) return;
+        struct stat st {};
+        if (::stat(path.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) return;
+
+        auto it = path_to_watch_.find(path);
+        if (it != path_to_watch_.end()) {
+            if (it->second.dev == st.st_dev && it->second.ino == st.st_ino) {
+                return;
+            }
+            // Directory inode changed (e.g., atomic move/replace): detach stale watch
+            (void)::inotify_rm_watch(ifd_, it->second.wd);
+            path_to_watch_.erase(it);
+        }
+
         int wd = ::inotify_add_watch(ifd_, path.c_str(), mask);
         if (wd >= 0) {
             wd_to_path_[wd] = path;
-            path_to_wd_[path] = wd;
+            path_to_watch_[path] = WatchEntry{wd, st.st_dev, st.st_ino};
         }
     }
 
-    // Erase wd mapping ONLY on IN_IGNORED to prevent wd reuse race conditions
+    // Erase wd mapping strictly on IN_IGNORED, guarding against delayed IN_IGNORED from replaced watches
     bool handle_ignored(int wd) {
         auto it = wd_to_path_.find(wd);
         if (it == wd_to_path_.end()) return false;
         const std::string old_path = it->second;
-        path_to_wd_.erase(old_path);
         wd_to_path_.erase(it);
+
+        auto pit = path_to_watch_.find(old_path);
+        if (pit != path_to_watch_.end() && pit->second.wd == wd) {
+            path_to_watch_.erase(pit);
+            if (old_path == target_ot_) {
+                watch_healthy_ = false;
+                needs_recovery_count_ = true;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Release moved directory watch immediately so recreated path can be re-watched on next arm
+    void handle_move_self(int wd) {
+        auto it = wd_to_path_.find(wd);
+        if (it == wd_to_path_.end()) return;
+        const std::string old_path = it->second;
+        auto pit = path_to_watch_.find(old_path);
+        if (pit != path_to_watch_.end() && pit->second.wd == wd) {
+            path_to_watch_.erase(pit);
+        }
+        (void)::inotify_rm_watch(ifd_, wd);
         if (old_path == target_ot_) {
             watch_healthy_ = false;
             needs_recovery_count_ = true;
-            return true;
         }
-        return false;
     }
 
     void mark_target_lost() {
@@ -611,7 +705,15 @@ public:
         }
         ensure_watch(cfg.moddir, IN_CREATE | IN_MOVED_TO | IN_DELETE_SELF);
 
-        const bool ot_watched = (path_to_wd_.find(target_ot_) != path_to_wd_.end()) && dir_exists(target_ot_);
+        bool ot_watched = false;
+        auto ot_it = path_to_watch_.find(target_ot_);
+        if (ot_it != path_to_watch_.end()) {
+            struct stat st {};
+            if (::stat(target_ot_.c_str(), &st) == 0 && S_ISDIR(st.st_mode) &&
+                ot_it->second.dev == st.st_dev && ot_it->second.ino == st.st_ino) {
+                ot_watched = true;
+            }
+        }
         if (ot_watched) {
             if (!watch_healthy_ && needs_recovery_count_) {
                 ++watch_recoveries_;
@@ -643,6 +745,12 @@ public:
     }
 
 private:
+    struct WatchEntry {
+        int wd;
+        dev_t dev;
+        ino_t ino;
+    };
+
     int ifd_;
     std::string target_ot_;
     bool watch_healthy_ = false;
@@ -650,7 +758,7 @@ private:
     uint64_t watch_recoveries_ = 0;
     int recovery_step_ = 0;
     std::unordered_map<int, std::string> wd_to_path_;
-    std::unordered_map<std::string, int> path_to_wd_;
+    std::unordered_map<std::string, WatchEntry> path_to_watch_;
 };
 
 void write_telemetry(const Config& cfg, const SyncStats& stats, uint64_t sync_count,
@@ -714,7 +822,7 @@ bool parse_args(int argc, char** argv, Config& cfg) {
         } else if (arg == "--no-fbe-wait") {
             cfg.skip_fbe_wait = true;
         } else if (arg == "--version") {
-            std::puts("coretype-watchd 1.2.0");
+            std::puts("coretype-watchd 1.2.2");
             return false;
         } else if (arg == "--help") {
             std::puts("Usage: coretype-watchd [--moddir PATH] [--datadir PATH] [--rundir PATH] [--oneshot] [--no-fbe-wait]");
@@ -749,8 +857,6 @@ int main(int argc, char** argv) {
         return 0;  // Another instance is already active
     }
 
-    (void)write_file_atomic(cfg.rundir + "/watchd.pid", std::to_string(::getpid()) + "\n", 0644);
-
     if (cfg.oneshot) {
         SyncStats st = perform_sync(cfg);
         const bool ot_ok = dir_exists(cfg.gms_files_root + "/fonts/opentype");
@@ -759,6 +865,8 @@ int main(int argc, char** argv) {
         ::close(lock_fd);
         return 0;
     }
+
+    (void)write_file_atomic(cfg.rundir + "/watchd.pid", std::to_string(::getpid()) + "\n", 0644);
 
     // Block signals so signalfd receives them cleanly inside epoll
     sigset_t mask;
@@ -785,7 +893,21 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // FBE-safe startup wait until Credential-Encrypted user storage (/sdcard/Android) unlocks
+    auto add_epoll = [epfd](int fd) {
+        struct epoll_event ev {};
+        ev.events = EPOLLIN;
+        ev.data.fd = fd;
+        return ::epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev) == 0;
+    };
+
+    if (!add_epoll(sfd)) {
+        ::close(epfd); ::close(tfd_recovery); ::close(tfd_debounce); ::close(ifd); ::close(sfd);
+        cleanup_rundir(cfg, lock_fd);
+        return 1;
+    }
+
+    // FBE-safe startup wait until Credential-Encrypted user storage (/sdcard/Android) unlocks.
+    // Uses epoll_wait on signalfd so SIGTERM/SIGINT shuts down instantaneously (< 1 ms).
     if (!cfg.skip_fbe_wait) {
         for (int wait_i = 0; wait_i < 90 && !dir_exists("/sdcard/Android"); ++wait_i) {
             if (module_disabled_or_removed(cfg)) {
@@ -793,15 +915,18 @@ int main(int argc, char** argv) {
                 cleanup_rundir(cfg, lock_fd);
                 return 0;
             }
-            struct signalfd_siginfo si {};
-            if (::read(sfd, &si, sizeof(si)) == static_cast<ssize_t>(sizeof(si))) {
-                if (si.ssi_signo == SIGTERM || si.ssi_signo == SIGINT) {
-                    ::close(epfd); ::close(tfd_recovery); ::close(tfd_debounce); ::close(ifd); ::close(sfd);
-                    cleanup_rundir(cfg, lock_fd);
-                    return 0;
+            struct epoll_event fbe_ev {};
+            int rc = ::epoll_wait(epfd, &fbe_ev, 1, 2000);
+            if (rc > 0 && fbe_ev.data.fd == sfd) {
+                struct signalfd_siginfo si {};
+                while (::read(sfd, &si, sizeof(si)) == static_cast<ssize_t>(sizeof(si))) {
+                    if (si.ssi_signo == SIGTERM || si.ssi_signo == SIGINT) {
+                        ::close(epfd); ::close(tfd_recovery); ::close(tfd_debounce); ::close(ifd); ::close(sfd);
+                        cleanup_rundir(cfg, lock_fd);
+                        return 0;
+                    }
                 }
             }
-            ::sleep(2);
         }
     }
 
@@ -815,14 +940,7 @@ int main(int argc, char** argv) {
     SyncStats last_stats = perform_sync(cfg);
     write_telemetry(cfg, last_stats, sync_count, watcher.healthy(), watcher.recoveries());
 
-    auto add_epoll = [epfd](int fd) {
-        struct epoll_event ev {};
-        ev.events = EPOLLIN;
-        ev.data.fd = fd;
-        return ::epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev) == 0;
-    };
-
-    if (!add_epoll(sfd) || !add_epoll(ifd) || !add_epoll(tfd_debounce) || !add_epoll(tfd_recovery)) {
+    if (!add_epoll(ifd) || !add_epoll(tfd_debounce) || !add_epoll(tfd_recovery)) {
         ::close(epfd); ::close(tfd_recovery); ::close(tfd_debounce); ::close(ifd); ::close(sfd);
         cleanup_rundir(cfg, lock_fd);
         return 1;
@@ -843,8 +961,16 @@ int main(int argc, char** argv) {
             const int fd = events[i].data.fd;
 
             if (fd == sfd) {
-                struct signalfd_siginfo si {};
-                while (::read(sfd, &si, sizeof(si)) == static_cast<ssize_t>(sizeof(si))) {
+                for (;;) {
+                    struct signalfd_siginfo si {};
+                    ssize_t sn = ::read(sfd, &si, sizeof(si));
+                    if (sn < 0) {
+                        if (errno == EINTR) continue;
+                        break;
+                    }
+                    if (sn != static_cast<ssize_t>(sizeof(si))) {
+                        break;
+                    }
                     if (si.ssi_signo == SIGTERM || si.ssi_signo == SIGINT) {
                         running = false;
                         break;
@@ -870,12 +996,31 @@ int main(int argc, char** argv) {
                 bool needs_rearm = false;
                 for (;;) {
                     ssize_t len = ::read(ifd, buf, sizeof(buf));
-                    if (len <= 0) break;
+                    if (len < 0) {
+                        if (errno == EINTR) continue;
+                        break;
+                    }
+                    if (len == 0) break;
                     ssize_t off = 0;
-                    while (off < len) {
+                    while (off + static_cast<ssize_t>(sizeof(struct inotify_event)) <= len) {
                         const auto* ev = reinterpret_cast<const struct inotify_event*>(buf + off);
+                        const ssize_t step = static_cast<ssize_t>(sizeof(struct inotify_event)) +
+                                             static_cast<ssize_t>(ev->len);
+                        if (step <= 0 || off + step > len) {
+                            break;
+                        }
+                        if (ev->mask & IN_Q_OVERFLOW) {
+                            needs_rearm = true;
+                            schedule_debounce = true;
+                            off += step;
+                            continue;
+                        }
+
                         const std::string wpath = watcher.path_for_wd(ev->wd);
-                        std::string_view ename = (ev->len > 0) ? std::string_view(ev->name) : std::string_view{};
+                        std::string_view ename;
+                        if (ev->len > 0) {
+                            ename = std::string_view(ev->name, ::strnlen(ev->name, ev->len));
+                        }
 
                         if (ev->mask & IN_IGNORED) {
                             // Erase wd mapping strictly on IN_IGNORED (prevents double-remove / wd reuse race)
@@ -889,24 +1034,26 @@ int main(int argc, char** argv) {
                                 running = false;
                             }
                         } else {
-                            if (ev->mask & (IN_DELETE_SELF | IN_MOVE_SELF)) {
+                            if (ev->mask & IN_MOVE_SELF) {
+                                watcher.handle_move_self(ev->wd);
+                                needs_rearm = true;
+                            } else if (ev->mask & IN_DELETE_SELF) {
                                 if (wpath == target_ot) {
                                     watcher.mark_target_lost();
                                 }
                                 needs_rearm = true;
-                            } else if (ev->mask & IN_CREATE) {
-                                if ((ev->mask & IN_ISDIR) || ename == "files" ||
-                                    ename == "fonts" || ename == "opentype") {
-                                    needs_rearm = true;
-                                    schedule_debounce = true;
-                                }
+                            } else if ((ev->mask & (IN_CREATE | IN_MOVED_TO)) &&
+                                       ((ev->mask & IN_ISDIR) || ename == "files" ||
+                                        ename == "fonts" || ename == "opentype")) {
+                                needs_rearm = true;
+                                schedule_debounce = true;
                             } else if (ev->mask & (IN_CLOSE_WRITE | IN_MOVED_TO)) {
                                 if (ends_with(ename, ".ttf")) {
                                     schedule_debounce = true;
                                 }
                             }
                         }
-                        off += static_cast<ssize_t>(sizeof(struct inotify_event) + ev->len);
+                        off += step;
                     }
                 }
                 if (running && needs_rearm) {

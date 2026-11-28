@@ -1,4 +1,4 @@
-/* CoreType v1.2.1 — Authentic Apple iOS 27 Liquid Glass (Auto Light / Dark, 60fps Pure CSS) */
+/* CoreType v1.2.2 — Authentic Apple iOS 27 Liquid Glass (Auto Light / Dark, 60fps Pure CSS) */
 
 :root {
   /* Light Mode Palette */
@@ -161,6 +161,11 @@ code {
     -webkit-backdrop-filter: none !important;
     border-color: var(--sep) !important;
     box-shadow: 0 2px 10px var(--glass-shadow) !important;
+  }
+  .tab-lens {
+    background: var(--accent-soft) !important;
+    border-color: var(--accent) !important;
+    box-shadow: none !important;
   }
 }
 
@@ -976,7 +981,8 @@ body.reduced-glass .tab-lens {
   }
   .interactive-glow,
   .ios-toast,
-  .ios-slider::before {
+  .ios-slider::before,
+  .tab-lens {
     transition: none;
   }
 }
