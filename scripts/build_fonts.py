@@ -42,31 +42,38 @@ ANDROID_WIN_ASCENT = 1968
 ANDROID_WIN_DESCENT = 492
 
 # 2D (opsz × wght) Apple HIG CoreText tracking rules evaluated top-to-bottom (first match wins):
-# - Text (opsz=17): snug -46 UPM for body/labels (wght < 580), breathing open to -32 UPM at
-#   Semibold/Bold (wght >= 580) and -20 UPM at Heavy/Black (wght >= 750) — makes HyperOS MiSans
-#   Weight Slider and bold UI runs feel alive with zero stroke collision.
+# - Text (opsz=17): snug -44 UPM for Regular body (wght < 480), smoothly breathing open across
+#   Medium/Bold-Text boost (-34 UPM at wght >= 480), Bold (-24 UPM at wght >= 620), and Heavy/Black
+#   (-16 UPM at wght >= 760) — prevents `rn` -> `m` collisions even when Android Accessibility
+#   "Bold text" (+300) or HyperOS MiSans Weight Slider is active.
 # - Display (opsz=28): airy -14 UPM for Thin/UltraLight clocks (wght <= 280), iconic -26 UPM
-#   for Light..Bold headers, and sculptural -16 UPM for Heavy/Black (wght >= 750).
+#   for Light..Medium titles, crisp -20 UPM for Semibold/Bold (wght >= 580), and sculptural
+#   -14 UPM for Heavy/Black (wght >= 750).
 # - Flex (continuous opsz 17..28): Apple's exact 20pt Text->Semi-Display (-34 UPM) and 24pt
-#   Large Display (-24 UPM) optical thresholds combined with weight-adaptive breathing (-14/-16/-20/-32 UPM).
+#   Large Display (-24 UPM) optical thresholds combined with weight-adaptive breathing.
 TEXT_WEIGHT_VARIATIONS = [
-    {"conditions": [("wght", 750.0, None)], "track_units": -20, "space_track": -10, "label": "Text-Heavy"},
-    {"conditions": [("wght", 580.0, None)], "track_units": -32, "space_track": -14, "label": "Text-Bold"},
+    {"conditions": [("wght", 760.0, None)], "track_units": -16, "space_track": -8, "label": "Text-Heavy"},
+    {"conditions": [("wght", 620.0, None)], "track_units": -24, "space_track": -11, "label": "Text-Bold"},
+    {"conditions": [("wght", 480.0, None)], "track_units": -34, "space_track": -14, "label": "Text-Medium"},
 ]
 
 DISPLAY_WEIGHT_VARIATIONS = [
     {"conditions": [("wght", None, 280.0)], "track_units": -14, "space_track": -6, "label": "Display-Thin"},
-    {"conditions": [("wght", 750.0, None)], "track_units": -16, "space_track": -8, "label": "Display-Heavy"},
+    {"conditions": [("wght", 750.0, None)], "track_units": -14, "space_track": -7, "label": "Display-Heavy"},
+    {"conditions": [("wght", 580.0, None)], "track_units": -20, "space_track": -9, "label": "Display-Bold"},
 ]
 
 FLEX_2D_VARIATIONS = [
-    {"conditions": [("opsz", 24.0, None), ("wght", 750.0, None)], "track_units": -16, "space_track": -8, "label": "Display-Heavy"},
+    {"conditions": [("opsz", 24.0, None), ("wght", 750.0, None)], "track_units": -14, "space_track": -7, "label": "Display-Heavy"},
     {"conditions": [("opsz", 24.0, None), ("wght", None, 280.0)], "track_units": -14, "space_track": -6, "label": "Display-Thin"},
+    {"conditions": [("opsz", 24.0, None), ("wght", 580.0, None)], "track_units": -20, "space_track": -9, "label": "Display-Bold"},
     {"conditions": [("opsz", 24.0, None)], "track_units": -24, "space_track": -10, "label": "Display"},
-    {"conditions": [("opsz", 20.0, None), ("wght", 750.0, None)], "track_units": -18, "space_track": -8, "label": "SemiDisplay-Heavy"},
+    {"conditions": [("opsz", 20.0, None), ("wght", 750.0, None)], "track_units": -16, "space_track": -8, "label": "SemiDisplay-Heavy"},
+    {"conditions": [("opsz", 20.0, None), ("wght", 620.0, None)], "track_units": -24, "space_track": -11, "label": "SemiDisplay-Bold"},
     {"conditions": [("opsz", 20.0, None)], "track_units": -34, "space_track": -14, "label": "SemiDisplay"},
-    {"conditions": [("wght", 750.0, None)], "track_units": -20, "space_track": -10, "label": "Text-Heavy"},
-    {"conditions": [("wght", 580.0, None)], "track_units": -32, "space_track": -14, "label": "Text-Bold"},
+    {"conditions": [("wght", 760.0, None)], "track_units": -16, "space_track": -8, "label": "Text-Heavy"},
+    {"conditions": [("wght", 620.0, None)], "track_units": -24, "space_track": -11, "label": "Text-Bold"},
+    {"conditions": [("wght", 480.0, None)], "track_units": -34, "space_track": -14, "label": "Text-Medium"},
 ]
 
 OPTICAL_SPECS = [
@@ -76,7 +83,7 @@ OPTICAL_SPECS = [
         "is_italic": False,
         "opsz": 17.0,
         "default_wdth": 96.5,
-        "track_units": -46,
+        "track_units": -44,
         "space_track": -18,
         "feature_variations": TEXT_WEIGHT_VARIATIONS,
         "family": "CoreType SF Pro Text",
@@ -89,7 +96,7 @@ OPTICAL_SPECS = [
         "is_italic": True,
         "opsz": 17.0,
         "default_wdth": None,
-        "track_units": -46,
+        "track_units": -44,
         "space_track": -18,
         "feature_variations": TEXT_WEIGHT_VARIATIONS,
         "family": "CoreType SF Pro Text",
@@ -128,7 +135,7 @@ OPTICAL_SPECS = [
         "is_italic": False,
         "opsz": (17.0, 17.0, 28.0),
         "default_wdth": 96.5,
-        "track_units": -46,
+        "track_units": -44,
         "space_track": -18,
         "feature_variations": FLEX_2D_VARIATIONS,
         "family": "CoreType SF Pro Flex",
@@ -311,6 +318,11 @@ def _build_tracking_lookup(font: "TTFont", track_units: int, space_track: int):
         elif cat in ("Ps", "Pe", "Pi", "Pf") or cp in (0x0022, 0x0027, 0x002F):
             # Parentheses, brackets, quotation marks & slash -> crisp 45% optical clearance
             delta = int(round(track_units * 0.45))
+            x_place = int(round(delta / 2.0))
+        elif cp in (0x0072, 0x0155, 0x0157, 0x0159):
+            # Lowercase 'r' has an open right terminal; 50% tracking prevents `rn` -> `m`
+            # fusion (e.g. "Username" -> "Usemame") even with Android Accessibility Bold Text ON.
+            delta = int(round(track_units * 0.50))
             x_place = int(round(delta / 2.0))
         elif aw <= 450:
             # Narrow punctuation / thin stems (i, l, ., :, ;) -> gentler proportional tracking
@@ -800,8 +812,8 @@ def self_test_specs() -> int:
 
     flex_specs = [s for s in OPTICAL_SPECS if s["out"] == "CoreType-SFPro-Flex.ttf"]
     assert len(flex_specs) == 1 and flex_specs[0]["opsz"] == (17.0, 17.0, 28.0), "Flex opsz must preserve Apple 17..28 domain"
-    assert flex_specs[0]["track_units"] == -46 and len(flex_specs[0]["feature_variations"]) == 7, (
-        "Flex 2D FeatureVariations must define 7 ordered opsz x wght rules"
+    assert flex_specs[0]["track_units"] == -44 and len(flex_specs[0]["feature_variations"]) == 10, (
+        "Flex 2D FeatureVariations must define 10 ordered opsz x wght rules"
     )
     gms_bold = [s for s in GMS_STATIC_SPECS if s["out"] == "CoreType-SFPro-GMS-Bold.ttf"]
     assert len(gms_bold) == 1 and gms_bold[0]["coords"].get("opsz") == 24.0, (

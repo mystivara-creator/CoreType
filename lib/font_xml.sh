@@ -500,7 +500,7 @@ ct_patch_font_xml() {
         }
         function classify_family(line) {
             if (line ~ /name="roboto-flex"/) return "flex"
-            if (line ~ /name="(sans-serif|mipro|misans|misans-latin|miui|google-sans|google-sans-text|google-sans-medium|inter)"/) return "sans"
+            if (line ~ /name="(sans-serif|mipro|misans|misans-vf|misans-latin|misans-global|mi-sans|miui|google-sans|google-sans-text|google-sans-medium|inter)"/) return "sans"
             if (line ~ /name="sans-serif-condensed"/) return "cond"
             if (line ~ /name="(sans-serif-display|google-sans-display|mipro-display)"/) return "disp"
             if (cjk_on == "1" && line ~ /lang="zh-Hans"/) return "zh_hans"
@@ -516,9 +516,9 @@ ct_patch_font_xml() {
                 emit_wrapped(fam_open, cond_f, 0)
             } else if (fam_type == "disp") {
                 emit_wrapped(fam_open, disp_f, 0)
-            } else if (fam_type == "zh_hans" && (fam_buf ~ /MiSansVF\.ttf/ || fam_buf ~ /MiLanProVF\.ttf/)) {
+            } else if (fam_type == "zh_hans" && (fam_buf ~ /MiSansVF\.ttf/ || fam_buf ~ /MiLanProVF\.ttf/ || fam_buf ~ /MiSansGlobalVF\.ttf/)) {
                 emit_wrapped(fam_open, cjk_f, 0)
-            } else if (fam_type == "unnamed" && (fam_buf ~ /MiSansLatinVF\.ttf/ || fam_buf ~ /Roboto-Regular\.ttf/)) {
+            } else if (fam_type == "unnamed" && (fam_buf ~ /MiSansLatinVF\.ttf/ || fam_buf ~ /MiSansVF_Overlay\.ttf/ || fam_buf ~ /MiSansGlobalVF\.ttf/ || fam_buf ~ /Roboto-Regular\.ttf/)) {
                 emit_wrapped("    <family>", sans_f, 1)
             } else {
                 printf "%s", fam_buf

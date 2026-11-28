@@ -88,13 +88,17 @@ jobs:
           dx_disp = min(g["dx"] for g in flex_28)
           assert dx_text < dx_semi < dx_disp < 0, f"Flex 2D opsz FeatureVariations did not graduate -46->-34->-24 (dx={dx_text}/{dx_semi}/{dx_disp})!"
           txt_reg = min(g["dx"] for g in json.loads(subprocess.check_output(["hb-shape", "--variations=wght=400", "--output-format=json", "fonts/CoreType-SFPro-Text.ttf", "Typography"], text=True)))
+          txt_med = min(g["dx"] for g in json.loads(subprocess.check_output(["hb-shape", "--variations=wght=500", "--output-format=json", "fonts/CoreType-SFPro-Text.ttf", "Typography"], text=True)))
           txt_bld = min(g["dx"] for g in json.loads(subprocess.check_output(["hb-shape", "--variations=wght=650", "--output-format=json", "fonts/CoreType-SFPro-Text.ttf", "Typography"], text=True)))
           txt_hvy = min(g["dx"] for g in json.loads(subprocess.check_output(["hb-shape", "--variations=wght=850", "--output-format=json", "fonts/CoreType-SFPro-Text.ttf", "Typography"], text=True)))
-          assert txt_reg < txt_bld < txt_hvy < 0, f"Text wght FeatureVariations did not relax tracking on bold/heavy ({txt_reg} -> {txt_bld} -> {txt_hvy})!"
+          assert txt_reg < txt_med < txt_bld < txt_hvy < 0, f"Text wght FeatureVariations did not relax cleanly ({txt_reg} -> {txt_med} -> {txt_bld} -> {txt_hvy})!"
+          u_rn = json.loads(subprocess.check_output(["hb-shape", "--variations=wght=400", "--output-format=json", "fonts/CoreType-SFPro-Text.ttf", "Username"], text=True))
+          assert u_rn[3]["dx"] > u_rn[4]["dx"], f"Lowercase r did not get anti-collision clearance in Username: {u_rn[3]} vs {u_rn[4]}"
           dsp_thn = min(g["dx"] for g in json.loads(subprocess.check_output(["hb-shape", "--variations=wght=200", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "Typography"], text=True)))
           dsp_reg = min(g["dx"] for g in json.loads(subprocess.check_output(["hb-shape", "--variations=wght=500", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "Typography"], text=True)))
+          dsp_bld = min(g["dx"] for g in json.loads(subprocess.check_output(["hb-shape", "--variations=wght=650", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "Typography"], text=True)))
           dsp_hvy = min(g["dx"] for g in json.loads(subprocess.check_output(["hb-shape", "--variations=wght=850", "--output-format=json", "fonts/CoreType-SFPro-Display.ttf", "Typography"], text=True)))
-          assert dsp_reg < dsp_hvy < 0 and dsp_reg < dsp_thn < 0, f"Display wght FeatureVariations did not adapt Thin/Heavy ({dsp_thn} / {dsp_reg} / {dsp_hvy})!"
+          assert dsp_reg < dsp_bld < dsp_hvy < 0 and dsp_reg < dsp_thn < 0, f"Display wght FeatureVariations did not adapt ({dsp_thn} / {dsp_reg} / {dsp_bld} / {dsp_hvy})!"
           s_jdm = json.loads(subprocess.check_output(["hb-shape", "--output-format=json", "fonts/CoreType-SFPro-Text.ttf", "Yanz 25 \u02b2\u1d48\u1d50"], text=True))
           assert all(g["g"] != ".notdef" for g in s_jdm), f"Missing superscript glyph in Phonetic Extensions: {s_jdm}"
           for f_logo in [

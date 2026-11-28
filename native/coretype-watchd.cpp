@@ -45,7 +45,7 @@ namespace {
 constexpr int kDebounceMs = 250;
 constexpr int kRecoveryBackoffMs[] = {1000, 3000, 10000};
 constexpr int kRecoveryStepCount = 3;
-constexpr int kTextTrackingUpm = -46;
+constexpr int kTextTrackingUpm = -44;
 constexpr int kDisplayTrackingUpm = -26;
 constexpr char kSelinuxSystemFile[] = "u:object_r:system_file:s0";
 

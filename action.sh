@@ -144,6 +144,14 @@ ct_export_diag() {
             _root_env="magisk"
         fi
         printf 'root_env=%s\n' "$_root_env"
+
+        _ms_list=""
+        for _msf in /system/fonts/MiSans* /product/fonts/MiSans* /system_ext/fonts/MiSans*; do
+            [ -f "$_msf" ] || continue
+            _mssz=$(ct_file_size "$_msf")
+            _ms_list="${_ms_list:+${_ms_list},}${_msf}(${_mssz})"
+        done
+        printf 'misans_files=%s\n' "${_ms_list:-none}"
     } > "$_dtmp" 2>/dev/null || ! mv "$_dtmp" "$_out" 2>/dev/null; then
         rm -f "$_dtmp" 2>/dev/null || true
         printf 'Failed to write diagnostic report to %s\n' "$_out" >&2

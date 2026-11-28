@@ -152,7 +152,7 @@ ct_write_fallback_telemetry() {
         printf 'gms_emoji_mounted=%s\n' "${CT_GMS_EMOJI_BOUND:-0}"
         printf 'sync_count=%s\n' "$_sc"
         printf 'last_sync_latency_us=0\n'
-        printf 'active_text_tracking_upm=-46\n'
+        printf 'active_text_tracking_upm=-44\n'
         printf 'active_display_tracking_upm=-26\n'
     } > "$_ttmp" 2>/dev/null && mv "$_ttmp" "$_tfile" 2>/dev/null; then
         chmod 0644 "$_tfile" 2>/dev/null || true

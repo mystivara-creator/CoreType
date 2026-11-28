@@ -91,7 +91,7 @@ ct_sync_stock_slots() {
     CT_MISANS_SLIDER_ACTIVE="0"
 
     # Clean stale font files before re-syncing (prevents leftover files after OTA slot change)
-    rm -rf "$_moddir/system/fonts" "$_moddir/system/product/fonts" 2>/dev/null || true
+    rm -rf "$_moddir/system/fonts" "$_moddir/system/product/fonts" "$_moddir/system/system_ext/fonts" 2>/dev/null || true
     mkdir -p "$_moddir/system/fonts"
 
     ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text.ttf" "$_moddir/system/fonts/$CT_SLOT_TEXT"
@@ -117,27 +117,33 @@ ct_sync_stock_slots() {
         ct_sync_font_file "$_src_fonts/CoreType-SFPro-Display-Italic.ttf" "$_moddir/system/fonts/$CT_SLOT_DITAL"
     fi
 
-    # HyperOS Latin font slots (HyperOS 1/2/3/4)
-    for _extra_font in MiSansVF_Overlay.ttf MiSansLatinVF.ttf; do
+    # HyperOS Latin font slots across /system/fonts, /product/fonts, and /system_ext/fonts
+    for _extra_font in MiSansVF_Overlay.ttf MiSansLatinVF.ttf MiSansGlobalVF.ttf; do
         if [ -e "$_sys_fdir/$_extra_font" ]; then
             ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text.ttf" "$_moddir/system/fonts/$_extra_font"
         fi
+        if [ -e "$_prod_fdir/$_extra_font" ] || [ -e "/system$_prod_fdir/$_extra_font" ]; then
+            ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text.ttf" "$_moddir/system/product/fonts/$_extra_font"
+        fi
+        if [ "$_sys_fdir" = "/system/fonts" ] && { [ -e "/system_ext/fonts/$_extra_font" ] || [ -e "/system/system_ext/fonts/$_extra_font" ]; }; then
+            ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text.ttf" "$_moddir/system/system_ext/fonts/$_extra_font"
+        fi
     done
-
-    if [ -e "$_prod_fdir/MiSansLatinVF.ttf" ] || [ -e "/system$_prod_fdir/MiSansLatinVF.ttf" ]; then
-        ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text.ttf" "$_moddir/system/product/fonts/MiSansLatinVF.ttf"
-    fi
 
     # Universal HyperOS MiSans + Font Weight Slider Support (HyperOS 1/2/3/4):
     # ONLY enabled when a separate CJK fallback exists on the ROM (zero CJK tofu boxes!).
     if [ -n "$CT_CJK_FALLBACK" ]; then
-        for _mi_vf in MiSansVF.ttf MiLanProVF.ttf; do
+        for _mi_vf in MiSansVF.ttf MiLanProVF.ttf MiSans-Regular.ttf; do
             if [ -e "$_sys_fdir/$_mi_vf" ]; then
                 ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text.ttf" "$_moddir/system/fonts/$_mi_vf"
                 CT_MISANS_SLIDER_ACTIVE="1"
             fi
             if [ -e "$_prod_fdir/$_mi_vf" ] || [ -e "/system$_prod_fdir/$_mi_vf" ]; then
                 ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text.ttf" "$_moddir/system/product/fonts/$_mi_vf"
+                CT_MISANS_SLIDER_ACTIVE="1"
+            fi
+            if [ "$_sys_fdir" = "/system/fonts" ] && { [ -e "/system_ext/fonts/$_mi_vf" ] || [ -e "/system/system_ext/fonts/$_mi_vf" ]; }; then
+                ct_sync_font_file "$_src_fonts/CoreType-SFPro-Text.ttf" "$_moddir/system/system_ext/fonts/$_mi_vf"
                 CT_MISANS_SLIDER_ACTIVE="1"
             fi
         done

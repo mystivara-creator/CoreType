@@ -436,7 +436,7 @@ if [ -n "$_cxx" ]; then
             && grep -q '^watch_health=healthy$' "$WD_RUN/telemetry.prop" \
             && grep -q '^watch_recoveries=0$' "$WD_RUN/telemetry.prop" \
             && grep -q '^sync_count=1$' "$WD_RUN/telemetry.prop" \
-            && grep -q '^active_text_tracking_upm=-46$' "$WD_RUN/telemetry.prop" \
+            && grep -q '^active_text_tracking_upm=-44$' "$WD_RUN/telemetry.prop" \
             && grep -q '^active_display_tracking_upm=-26$' "$WD_RUN/telemetry.prop"; then
             pass "coretype-watchd booted in epoll mode & emitted valid telemetry.prop (watch_health=healthy)"
         else

@@ -405,7 +405,7 @@
     const sc = parseInt(tm.sync_count || "0", 10);
     document.getElementById("tm-syncs").textContent = `${sc} ${sc === 1 ? "sync" : "syncs"}`;
 
-    const tTrak = tm.active_text_tracking_upm || "-46";
+    const tTrak = tm.active_text_tracking_upm || "-44";
     const dTrak = tm.active_display_tracking_upm || "-26";
     document.getElementById("tm-trak").textContent = `${tTrak} / ${dTrak} UPM`;
 
@@ -526,7 +526,7 @@
           gms_emoji_mounted: "4",
           sync_count: "3",
           last_sync_latency_us: "840",
-          active_text_tracking_upm: "-46",
+          active_text_tracking_upm: "-44",
           active_display_tracking_upm: "-26",
         },
         {}
